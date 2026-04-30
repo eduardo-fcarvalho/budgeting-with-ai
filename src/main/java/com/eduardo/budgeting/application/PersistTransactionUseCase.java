@@ -5,7 +5,9 @@ import com.eduardo.budgeting.application.output.TransactionOutput;
 import com.eduardo.budgeting.domain.Category;
 import com.eduardo.budgeting.domain.Transaction;
 import com.eduardo.budgeting.domain.TransactionRepository;
+import org.springframework.stereotype.Service;
 
+@Service
 public class PersistTransactionUseCase {
     private final TransactionRepository transactionRepository;
 
