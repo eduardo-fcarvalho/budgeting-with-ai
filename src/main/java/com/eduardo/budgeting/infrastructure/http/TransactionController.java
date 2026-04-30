@@ -5,9 +5,17 @@ import com.eduardo.budgeting.application.PersistTransactionUseCase;
 import com.eduardo.budgeting.domain.Category;
 import com.eduardo.budgeting.infrastructure.http.request.TransactionRequest;
 import com.eduardo.budgeting.infrastructure.http.response.TransactionResponse;
+import org.springframework.ai.audio.transcription.TranscriptionModel;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -18,9 +26,22 @@ public class TransactionController {
     private final PersistTransactionUseCase persistTransactionUseCase;
     private final ListTransactionsByCategoryUseCase listTransactionsByCategoryUseCase;
 
-    public TransactionController(PersistTransactionUseCase persistTransactionUseCase, ListTransactionsByCategoryUseCase listTransactionsByCategoryUseCase) {
+    private final TranscriptionModel transcriptionModel;
+    private final ChatClient chatClient;
+
+    public TransactionController(PersistTransactionUseCase persistTransactionUseCase,
+                                 ListTransactionsByCategoryUseCase listTransactionsByCategoryUseCase,
+                                 TranscriptionModel transcriptionModel,
+                                 @Value("classpath:/prompts/system-message.st") Resource systemPrompt,
+                                 ChatClient.Builder chatClientBuilder) throws IOException {
         this.persistTransactionUseCase = persistTransactionUseCase;
         this.listTransactionsByCategoryUseCase = listTransactionsByCategoryUseCase;
+        this.transcriptionModel = transcriptionModel;
+        this.chatClient = chatClientBuilder
+                .defaultSystem(systemPrompt.getContentAsString(Charset.defaultCharset()))
+                .defaultTools(persistTransactionUseCase, listTransactionsByCategoryUseCase)
+                .build();
+
     }
 
     @PostMapping
@@ -36,5 +57,15 @@ public class TransactionController {
                 .stream()
                 .map(TransactionResponse::from)
                 .collect(Collectors.toList());
+    }
+
+    @PostMapping(value = "/ai", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    String transcribe(@RequestParam("file") MultipartFile file) {
+        var resource = file.getResource();
+        var userMessage = transcriptionModel.transcribe(resource);
+
+        var result = chatClient.prompt().user(userMessage).call().content();
+
+        return result;
     }
 }

@@ -3,6 +3,8 @@ package com.eduardo.budgeting.application;
 import com.eduardo.budgeting.application.output.TransactionOutput;
 import com.eduardo.budgeting.domain.Category;
 import com.eduardo.budgeting.domain.TransactionRepository;
+import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -15,7 +17,8 @@ public class ListTransactionsByCategoryUseCase {
         this.transactionRepository = transactionRepository;
     }
 
-    public List<TransactionOutput> execute(Category category) {
+    @Tool(name = "list-transactions-by-category", description = "Lista transações financeiras por categoria")
+    public List<TransactionOutput> execute(@ToolParam(description = "Categoria de uma transação") Category category) {
         return transactionRepository.findAllByCategory(category)
                 .stream()
                 .map(TransactionOutput::from)
