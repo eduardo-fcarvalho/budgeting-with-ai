@@ -6,11 +6,12 @@ import com.eduardo.budgeting.domain.Category;
 import com.eduardo.budgeting.infrastructure.http.request.TransactionRequest;
 import com.eduardo.budgeting.infrastructure.http.response.TransactionResponse;
 import org.springframework.ai.audio.transcription.TranscriptionModel;
+import org.springframework.ai.audio.tts.TextToSpeechModel;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
+import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -28,15 +29,17 @@ public class TransactionController {
 
     private final TranscriptionModel transcriptionModel;
     private final ChatClient chatClient;
+    private final TextToSpeechModel textToSpeechModel;
 
     public TransactionController(PersistTransactionUseCase persistTransactionUseCase,
                                  ListTransactionsByCategoryUseCase listTransactionsByCategoryUseCase,
                                  TranscriptionModel transcriptionModel,
                                  @Value("classpath:/prompts/system-message.st") Resource systemPrompt,
-                                 ChatClient.Builder chatClientBuilder) throws IOException {
+                                 ChatClient.Builder chatClientBuilder, TextToSpeechModel textToSpeechModel) throws IOException {
         this.persistTransactionUseCase = persistTransactionUseCase;
         this.listTransactionsByCategoryUseCase = listTransactionsByCategoryUseCase;
         this.transcriptionModel = transcriptionModel;
+        this.textToSpeechModel = textToSpeechModel;
         this.chatClient = chatClientBuilder
                 .defaultSystem(systemPrompt.getContentAsString(Charset.defaultCharset()))
                 .defaultTools(persistTransactionUseCase, listTransactionsByCategoryUseCase)
@@ -59,13 +62,21 @@ public class TransactionController {
                 .collect(Collectors.toList());
     }
 
-    @PostMapping(value = "/ai", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    String transcribe(@RequestParam("file") MultipartFile file) {
-        var resource = file.getResource();
-        var userMessage = transcriptionModel.transcribe(resource);
+    @PostMapping(value = "/ai", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = "audio/mp3")
+    ResponseEntity<Resource> transcribe(@RequestParam("file") MultipartFile file) {
+        var userMessage = transcriptionModel.transcribe(file.getResource());
 
         var result = chatClient.prompt().user(userMessage).call().content();
 
-        return result;
+        byte[] audio = textToSpeechModel.call(result);
+        var resource = new ByteArrayResource(audio);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment()
+                                .filename("audio.mp3")
+                                .build()
+                                .toString())
+                .body(resource);
     }
 }
