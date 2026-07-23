@@ -176,13 +176,18 @@ Transcription:
 Model: whisper-1
 
 Language: PT-BR
+
 Custom prompt for financial context
 Chat:
 Model: gpt-4o-mini
+
 Temperature: 0.7
+
 TTS:
 Model: gpt-4o-mini-tts
+
 Voice: nova
+
 Output: MP3
 
 ---
