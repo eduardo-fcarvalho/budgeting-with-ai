@@ -55,10 +55,14 @@ class VoiceContractTest {
             assertThat(result.draft().amount()).isEqualTo(4290);
             assertThat(result.microUsd()).isPositive().isLessThan(5000);
         }
-        assertThat(requests).hasSize(3);
-        assertThat(requests.get(0)).contains("gpt-transcribe","gasto.wav","RIFF");
-        assertThat(requests.get(1)).contains("gpt-6-luna","42,90");
-        assertThat(requests.get(2)).contains("gpt-audio-1.5","input_audio");
+        assertThat(requests.size()).isEqualTo(3);
+        assertRequest(0, "transcrição de WAV", "gpt-transcribe", "gasto.wav", "RIFF");
+        assertRequest(1, "extração a partir da transcrição", "gpt-6-luna", "42,90");
+        assertRequest(2, "extração com áudio direto", "gpt-audio-1.5", "input_audio");
+    }
+
+    private static void assertRequest(int index, String label, String... expected) {
+        assertThat(Arrays.stream(expected).allMatch(requests.get(index)::contains)).as(label).isTrue();
     }
 
     @Test void spendingCapBlocksNextReservationAndRefundsUnusedBalance() {

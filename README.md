@@ -71,3 +71,6 @@ escolhida e envie a cópia criptografada ao armazenamento externo; a chave de re
 deve ficar disponível fora do servidor. Para testar a recuperação, crie um banco vazio,
 aponte as variáveis para esse banco e execute `scripts/restore.sh /caminho/piloto.dump`.
 Confira contas, categorias e gastos antes de trocar a conexão da aplicação. Sessões antigas ficam fora do dump.
+
+A restauração encerra o orçamento de voz do mês UTC em curso, pois o dump pode anteceder
+chamadas já cobradas. O diário manual continua disponível e o orçamento volta no primeiro dia do mês seguinte.

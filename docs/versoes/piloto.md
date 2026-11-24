@@ -18,3 +18,6 @@ paga em português. O backup externo e a aceitação nos dois celulares dependem
   após logout.
 - Backup e restauração em PostgreSQL vazio. O gasto restaurado manteve 4.290 centavos,
   data e categoria. Nenhuma sessão foi restaurada.
+
+A recuperação esgota o orçamento de IA do mês UTC em curso para cobrir chamadas feitas
+depois do último backup. O lançamento manual continua disponível.

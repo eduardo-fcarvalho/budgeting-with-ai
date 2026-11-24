@@ -30,8 +30,9 @@ class AccountCommand implements ApplicationRunner {
             var mode = args.getOptionValues("budget.account").getFirst();
             String hash = passwords.encode(new String(password));
             if ("create".equals(mode)) {
-                db.sql("insert into account(id,email,password_hash) values(?,?,?)")
+                int inserted = db.sql("insert into account(id,email,password_hash) values(?,?,?) on conflict (email) do nothing")
                         .params(UUID.randomUUID(), email, hash).update();
+                if (inserted == 0) throw new IllegalArgumentException("Esta conta já existe.");
             } else if ("reset".equals(mode)) {
                 var id = db.sql("update account set password_hash=? where email=? returning id")
                         .params(hash,email).query(UUID.class).single();

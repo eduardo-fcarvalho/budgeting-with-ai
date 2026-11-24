@@ -37,6 +37,5 @@ public class OpenAiTranscriptionModelIT {
                 r -> Assertions.assertThat(r).containsIgnoringCase(writtenKeyword)
         );
 
-        IO.println(response);
     }
 }

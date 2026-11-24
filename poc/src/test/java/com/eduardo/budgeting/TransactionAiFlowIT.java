@@ -61,11 +61,7 @@ class TransactionAiFlowIT {
     void should_persistExpectedTransaction_when_audioIsSent(String audioFile, String description, Long amount, Category category) throws Exception {
         var file = new ClassPathResource("audio/" + audioFile);
         if (!file.exists()) {
-            auditLog.add(new AuditEntry(
-                    audioFile, description, amount, category,
-                    null, null, null,
-                    TestStatus.SKIPPED, "Audio file not found in test resources"
-            ));
+            auditLog.add(new AuditEntry(audioFile, TestStatus.SKIPPED, "Arquivo ausente"));
             Assumptions.assumeTrue(false, "Audio file not found: " + audioFile);
             return;
         }
@@ -91,27 +87,14 @@ class TransactionAiFlowIT {
             Assertions.assertThat(persisted).hasSize(1);
 
             var actual = persisted.getFirst();
-            Assertions.assertThat(actual.getDescription()).isEqualToIgnoringCase(description.trim());
+            Assertions.assertThat(description.trim().equalsIgnoreCase(actual.getDescription())).isTrue();
             Assertions.assertThat(actual.getAmount()).isEqualTo(amount);
             Assertions.assertThat(actual.getCategory()).isEqualTo(category);
 
-            auditLog.add(new AuditEntry(
-                    audioFile, description, amount, category,
-                    actual.getDescription(), actual.getAmount(), actual.getCategory(),
-                    TestStatus.PASSED, null
-            ));
+            auditLog.add(new AuditEntry(audioFile, TestStatus.PASSED, "-"));
         } catch (Throwable t) {
-            var persistedList = StreamSupport.stream(transactionEntityRepository.findAll().spliterator(), false).toList();
-            String actualDesc = persistedList.isEmpty() ? null : persistedList.getFirst().getDescription();
-            Long actualAmt = persistedList.isEmpty() ? null : persistedList.getFirst().getAmount();
-            Category actualCat = persistedList.isEmpty() ? null : persistedList.getFirst().getCategory();
-
-            auditLog.add(new AuditEntry(
-                    audioFile, description, amount, category,
-                    actualDesc, actualAmt, actualCat,
-                    TestStatus.FAILED, t.getMessage()
-            ));
-            throw t;
+            auditLog.add(new AuditEntry(audioFile, TestStatus.FAILED, t.getClass().getSimpleName()));
+            throw new AssertionError("Falha no caso " + audioFile + " (" + t.getClass().getSimpleName() + ")");
         }
     }
 
@@ -135,32 +118,10 @@ class TransactionAiFlowIT {
         report.append(String.format("Skipped (Missing file) : %d%n", skipped));
         report.append(String.format("Accuracy Rate          : %.2f%%%n", accuracy));
         report.append("========================================================================================================================\n");
-        report.append(String.format("%-8s | %-16s | %-38s | %-38s | %s%n", "STATUS", "AUDIO FILE", "EXPECTED (Desc, Amt, Cat)", "ACTUAL (Desc, Amt, Cat)", "DETAILS"));
-        report.append("------------------------------------------------------------------------------------------------------------------------\n");
-
         for (AuditEntry entry : auditLog) {
-            String expected = String.format("%s, %d, %s", entry.expectedDescription(), entry.expectedAmount(), entry.expectedCategory());
-            String actual = entry.actualDescription() != null
-                    ? String.format("%s, %d, %s", entry.actualDescription(), entry.actualAmount(), entry.actualCategory())
-                    : "-";
-            String details = entry.failureReason() != null ? entry.failureReason().replace('\n', ' ') : "-";
-
-            report.append(String.format("%-8s | %-16s | %-38s | %-38s | %s%n",
-                    entry.status(),
-                    entry.audioFile(),
-                    truncate(expected, 38),
-                    truncate(actual, 38),
-                    truncate(details, 50)));
+            report.append(String.format("%-8s | %-16s | %s%n", entry.status(), entry.audioFile(), entry.failureReason()));
         }
-        report.append("========================================================================================================================\n");
-
         log.info("{}", report);
-        System.out.println(report);
-    }
-
-    private static String truncate(String str, int maxLen) {
-        if (str == null) return "";
-        return str.length() <= maxLen ? str : str.substring(0, maxLen - 3) + "...";
     }
 
     Stream<Arguments> audioTransactions() throws IOException {
@@ -179,18 +140,7 @@ class TransactionAiFlowIT {
         SKIPPED
     }
 
-    record AuditEntry(
-            String audioFile,
-            String expectedDescription,
-            Long expectedAmount,
-            Category expectedCategory,
-            String actualDescription,
-            Long actualAmount,
-            Category actualCategory,
-            TestStatus status,
-            String failureReason
-    ) {
-    }
+    record AuditEntry(String audioFile, TestStatus status, String failureReason) {}
 
     record AudioTransactionCase(String audioFile, String description, Long amount, Category category) {
     }
