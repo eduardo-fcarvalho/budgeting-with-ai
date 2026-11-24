@@ -2,7 +2,6 @@ package com.eduardo.budgeting.application;
 
 import com.eduardo.budgeting.application.input.PersistTransactionInput;
 import com.eduardo.budgeting.application.output.TransactionOutput;
-import com.eduardo.budgeting.domain.Category;
 import com.eduardo.budgeting.domain.Transaction;
 import com.eduardo.budgeting.domain.TransactionRepository;
 import org.springframework.ai.tool.annotation.Tool;
