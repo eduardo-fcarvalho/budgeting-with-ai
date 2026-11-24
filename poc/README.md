@@ -7,3 +7,5 @@ chamar a IA, use na raiz `./mvnw -f poc/pom.xml -DskipTests package`.
 Os testes de integração históricos usam serviços pagos e o fluxo limpa a tabela de transações.
 O Hibernate da PoC usa create-drop. Qualquer execução histórica requer MySQL descartável
 e credenciais isoladas. O piloto usa PostgreSQL e permanece independente desta árvore.
+
+A [documentação original](README-original.md) descreve a versão da PoC que antecedeu o piloto.

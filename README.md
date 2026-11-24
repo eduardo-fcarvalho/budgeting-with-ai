@@ -11,7 +11,7 @@ Use Docker Compose e defina `POSTGRES_PASSWORD` no ambiente ou em uma cópia loc
 `.env.example`. Para testar no computador, execute
 `COOKIE_SECURE=false docker compose up --build -d` e abra http://localhost:8080.
 A primeira inicialização cria as tabelas com Flyway. O volume PostgreSQL é exclusivo do piloto.
-A PoC e seu Compose MySQL estão preservados em `poc/`.
+A [PoC e seu Compose MySQL](poc/README.md) estão preservados com a documentação original.
 
 Para criar cada conta, execute no terminal
 `docker compose exec app java -jar /app/app.jar --spring.main.web-application-type=none --budget.account=create`.
