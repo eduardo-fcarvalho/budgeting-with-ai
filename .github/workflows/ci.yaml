@@ -4,7 +4,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, 'bg-*']
 
 # Um push novo no mesmo PR cancela a execução anterior, que já ficou velha.
 concurrency:
@@ -22,7 +22,7 @@ jobs:
     timeout-minutes: 5
     steps:
       # fetch-depth 0: as conferências do PR comparam com a origin/main, que um clone raso não tem.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 0
