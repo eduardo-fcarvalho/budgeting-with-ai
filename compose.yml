@@ -1,20 +1,29 @@
+name: budgeting-pilot
 services:
   database:
-    image: mysql:9.6
+    image: postgres:18-alpine
     environment:
-      MYSQL_DATABASE: transaction
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_USER: app
-      MYSQL_PASSWORD: app
-    ports:
-      - "3307:3306"
+      POSTGRES_DB: budgeting
+      POSTGRES_USER: budgeting
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina a senha do banco}
     volumes:
-      - transaction_data:/var/lib/mysql
+      - diary_data:/var/lib/postgresql
     healthcheck:
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-uapp", "-papp" ]
+      test: ["CMD-SHELL", "pg_isready -U budgeting -d budgeting"]
       interval: 5s
-      timeout: 5s
-      retries: 5
-
+      timeout: 3s
+      retries: 12
+  app:
+    build: .
+    environment:
+      DATABASE_URL: jdbc:postgresql://database:5432/budgeting
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
 volumes:
-  transaction_data:
+  diary_data:

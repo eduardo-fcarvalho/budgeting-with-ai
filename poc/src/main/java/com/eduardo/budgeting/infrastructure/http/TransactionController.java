@@ -18,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @RestController
@@ -66,9 +67,8 @@ public class TransactionController {
     ResponseEntity<Resource> transcribe(@RequestParam("file") MultipartFile file) {
         var userMessage = transcriptionModel.transcribe(file.getResource());
 
-        var result = chatClient.prompt().user(userMessage).call().content();
-
-        byte[] audio = textToSpeechModel.call(result);
+        byte[] audio = textToSpeechModel.call(
+                Objects.requireNonNull(chatClient.prompt().user(userMessage).call().content()));
         var resource = new ByteArrayResource(audio);
 
         return ResponseEntity.ok()

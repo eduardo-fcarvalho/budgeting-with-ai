@@ -1,358 +1,76 @@
-# 📊 Budgeting with AI
-
-A Spring Boot backend service for **voice-based expense tracking**, leveraging AI for transcription, interpretation, and audio response generation.
-
----
-
-## 📌 Overview
-
-This service allows users to register expenses using natural speech, for example:
-
-> “I spent 30 reais at the market”
-
-The system:
-
-1. Transcribes the audio (Speech-to-Text)
-2. Interprets the content using AI (LLM)
-3. Structures financial data
-4. Persists it into a database
-5. Returns an audio response (Text-to-Speech)
-
----
-
-## 🚀 Features
-
-- 🎙️ Audio transcription using **OpenAI Whisper**
-- 🧠 Natural language understanding with **LLMs**
-- 💾 Data persistence using **Spring Data JPA**
-- 🔊 Audio response generation (TTS)
-- 🌐 REST API with Spring Boot
-- 📄 Automatic API documentation with Swagger
-
----
-
-## 🧱 Tech Stack
-
-### Core
-
-- Java 25
-- Spring Boot 4
-- Maven
-
-### Backend
-
-- Spring Web MVC
-- Spring Data JPA
-- Lombok
-
-### AI / ML
-
-- Spring AI
-- OpenAI API
-  - `gpt-4o-mini` (interpretation)
-  - `whisper-1` (transcription)
-  - `gpt-4o-mini-tts` (audio generation)
-
-### Database
-
-- MySQL
-
-### Docs
-
-- SpringDoc OpenAPI (Swagger UI)
-
----
-
-## ⚙️ Setup & Run
-
-### Prerequisites
-
-- JDK 25
-- Maven
-- MySQL running
-- OpenAI API Key
-
----
-
-### 1. Clone
-
-```bash
-git clone https://github.com/eduardo-fcarvalho/budgeting-with-ai.git
-cd budgeting-with-ai
-```
-
-### 2. Configure environment variables
-
-```bash
-export OPENAI_API_KEY=your_api_key_here
-```
-
-### 3. Start dependencies (Docker Compose)
-
-This project uses **Spring Boot Docker Compose support**, which automatically starts required services defined in a `compose.yml` file.
-
-When the application starts, Spring Boot will:
-
-- Detect the `compose.yml` file
-- Automatically run `docker compose up`
-- Configure connection properties (e.g., database URL) dynamically
-
-> ⚠️ Make sure Docker is running on your machine.
-
-No manual database setup is required.
-
-
-
-### 4. Running the application
-
-
-#### Option 1: IDE (Recommended)
----
-If you're using an IDE like IntelliJ or Eclipse:
-
-- Simply run the main class (`BudgetingApplication`)
-- Spring Boot will:
-  - Start the application
-  - Automatically provision dependencies via Docker Compose (if configured)
-
-> ⚠️ Make sure Docker is running.
-
-
-
-#### Option 2: Command Line
----
-```bash
-mvn spring-boot:run
-```
-
-or 
-
-```bash
-java -jar target/budgeting-0.0.1-SNAPSHOT.jar
-```
-
-```markdown
-> Note: Most modern IDEs handle build and startup automatically.
-> CLI instructions are provided for consistency and CI/CD environments.
-```
-
----
-### 🐳 Docker Integration
-
-This project leverages Spring Boot's native Docker Compose integration (`spring-boot-docker-compose`).
-
-This means:
-
-- No need to manually start the database
-- No need to configure connection URLs
-- Everything is wired automatically at runtime
-
-Just run the application and dependencies will be provisioned.
----
-
-## 🔄 Application Flow
-```markdown
-Audio Input
-   ↓
-Whisper (Speech-to-Text)
-   ↓
-LLM (Extract financial data)
-   ↓
-JPA (Persist data)
-   ↓
-TTS (Generate audio response)
-   ↓
-API Response
-```
-
----
-
-## 🧠 AI Configuration
-
-Relevant configuration (application.properties):
-
-Transcription:
-
-Model: whisper-1
-
-Language: PT-BR
-
-Custom prompt for financial context
-Chat:
-Model: gpt-4o-mini
-
-Temperature: 0.7
-
-TTS:
-Model: gpt-4o-mini-tts
-
-Voice: nova
-
-Output: MP3
-
----
-## 🧠 AI Configuration
-
-Relevant configuration (`application.properties`):
-
-- **Transcription:**
-  - Model: `whisper-1`
-  - Language: PT-BR
-  - Custom prompt for financial context
-
-- **Chat:**
-  - Model: `gpt-4o-mini`
-  - Temperature: 0.7
-
-- **TTS (Text-to-Speech):**
-  - Model: `gpt-4o-mini-tts`
-  - Voice: `nova`
-  - Output: MP3
-
----
-## 📡 API Endpoints
-
-### 🧾 Transactions
-
-#### `POST /transactions`
-
-Creates a new transaction manually.
-
-**Request Body**
-
-```json
-{
-  "description": "Lunch at restaurant",
-  "category": "GROCERIES",
-  "amount": 50
-}
-```
-**Response(201)**
-```json
-{
-  "id": "uuid",
-  "category": "GROCERIES",
-  "description": "Lunch at restaurant",
-  "amount": 50.0
-}
-```
----
-
-#### `GET /transactions/category`
-Retrieves transactions filtered by category.
-
-| Parameter | Type |    Description |
-|----------|------|-------------|
-| category | String | One of:`GROCERIES`,`PHARMA`,`AUTO` |
-
-**Response(200)**
-```json
-[
-  {
-    "id": "uuid",
-    "category": "GROCERIES",
-    "description": "Supermarket",
-    "amount": 120.0
-  }
-]
-```
----
-### 🤖 AI Processing
-### `POST /transactions/ai`
-Processes an audio file and creates a transaction automatically.
-
-**Content-type** 
-
-```http
-multipart/form-data
-```
-
-
-
-| Parameter | Type | Required | Description |
-|----------|------|----------|-------------|
-| file | binary | Yes | Audio file with expense description |
-
-
-**Response(200)**
-
-
-Returns generated audio response (`audio/mp3`).
-
-**Status Codes**
-
-| Code | Description |
-|------|-------------|
-| 200 | OK |
-| 201 | Created |
-
----
-### 📚 Swagger
-
-Access locally:
-
-```http
-http://localhost:8080/swagger-ui/index.html
-```
-
----
-## 🗂️ Project Structure
-
-```bash
-src/main/java/com/eduardo/budgeting/
-├── application/                 # Use cases (application layer)
-│   ├── input/                  # Input boundaries (use case requests)
-│   ├── output/                 # Output boundaries (use case responses)
-│   ├── PersistTransactionUseCase
-│   └── ListTransactionsByCategoryUseCase
-│
-├── domain/                     # Core business logic
-│   ├── Transaction             # Entity
-│   ├── TransactionID           # Value Object
-│   ├── Category                # Enum
-│   └── TransactionRepository   # Domain interface (port)
-│
-├── infrastructure/             # Adapters & external concerns
-│   ├── http/
-│   │   ├── request/           # HTTP request models
-│   │   ├── response/          # HTTP response models
-│   │   └── TransactionController
-│   │
-│   └── persistence/           # Database implementation
-│
-└── BudgetingApplication.java  # Entry point
-```
-
----
-## ⚠️ Caveats & Considerations
-
-- **External AI Dependency**  
-  The service relies heavily on OpenAI APIs, which may introduce latency and variable operational costs.
-
-- **Natural Language Variability**  
-  Parsing results depend on AI interpretation and may produce inconsistent outputs depending on input phrasing.
-
-- **Database Configuration**  
-  The current setup uses `ddl-auto=update`, which is convenient for development but not recommended for production environments.
-
-- **Authentication & Security**  
-  No authentication or authorization mechanisms are implemented yet.
-
-- **Environment Configuration**  
-  The project does not currently separate configurations for different environments (e.g., development, staging, production).
-
-
----
-
-## 👤 Author
-
-**Eduardo Carvalho**  
-
-- GitHub: https://github.com/eduardo-fcarvalho  
-- LinkedIn: https://www.linkedin.com/in/eduardo-carvalho-25632b98/
-
-## Piloto da PWA
-
-O próximo marco é um diário de gastos com login, histórico privado e consulta offline.
-Consulte o [briefing](docs/briefing.md), o [status](docs/versoes/piloto.md)
-e a [pesquisa de voz e hospedagem](docs/pesquisa-piloto.md).
+# Budgeting
+
+Diário pessoal de gastos em reais, com conferência de lançamentos ditados e consulta offline no celular.
+
+O piloto está em desenvolvimento. Consulte [briefing](docs/briefing.md), [status](docs/versoes/piloto.md)
+e [pesquisa de voz e hospedagem](docs/pesquisa-piloto.md).
+
+## Rodar o piloto
+
+Use Docker Compose e defina `POSTGRES_PASSWORD` no ambiente ou em uma cópia local de
+`.env.example`. Para testar no computador, execute
+`COOKIE_SECURE=false docker compose up --build -d` e abra http://localhost:8080.
+A primeira inicialização cria as tabelas com Flyway. O volume PostgreSQL é exclusivo do piloto.
+A [PoC e seu Compose MySQL](poc/README.md) estão preservados com a documentação original.
+
+Para criar cada conta, execute no terminal
+`docker compose exec app java -jar /app/app.jar --spring.main.web-application-type=none --budget.account=create`.
+O comando solicita e-mail e senha com entrada de senha oculta. Use `--budget.account=reset`
+para redefinir a senha e revogar as sessões no servidor. Em um celular desconectado, a cópia já sincronizada
+permanece acessível até o logout local ou a próxima verificação da sessão.
+
+## Verificar
+
+- Com Java 25 e PostgreSQL **descartável**, defina `DATABASE_URL` (URL JDBC),
+  `POSTGRES_USER` e `POSTGRES_PASSWORD` e execute `./mvnw -B clean verify`.
+  Os testes criam contas fictícias. O servidor HTTP simulado verifica os modelos
+  realmente enviados pelo Spring AI e a cobrança registrada. O contrato OpenAPI é servido em
+  `/v3/api-docs` com a sessão autenticada.
+- Em `frontend/`, use Node 24 e rode `npm ci`, `npm test`, `npm run build`,
+  `npx playwright install --with-deps chromium` e `npm run test:browser`.
+- Execute `python3 -m unittest discover -s scripts/guardrails` para os hooks.
+
+## Voz e experimento pago
+
+Sem `OPENAI_API_KEY`, o diário manual continua disponível. Com a chave no servidor,
+a configuração inicial usa `gpt-transcribe` e `gpt-6-luna`. A transcrição usa
+detecção automática de idioma e resposta JSON. A extração instrui o modelo em português.
+O próprio servidor valida o cabeçalho PCM e o limite de 30 segundos.
+`VOICE_PATH=direct` seleciona o candidato de áudio direto para comparação.
+
+Os valores são registrados em milionésimos de dólar por mês UTC. A reserva é atômica
+no PostgreSQL e compartilhada pelas contas e pelo experimento. Uma falha de custo desconhecido
+mantém a reserva. O candidato direto reserva até US$ 4,10112 por tentativa e devolve o excedente
+após receber a contagem de tokens. Com pouco saldo ele pode ficar indisponível antes do caminho em duas etapas.
+A tabela de preços e os limites de entrada/saída usados no código devem ser revistos juntos quando o modelo mudar.
+
+Para o ensaio, use Java 25, Python 3 e FFmpeg. Aponte `DATABASE_URL`, usuário e senha **para o mesmo banco que
+controla o orçamento de IA**. Prepare os nove clipes com `python3 scripts/prepare-benchmark.py`.
+Execute apenas `RUN_PAID_BENCHMARK=yes ./mvnw -Dtest=VoiceBenchmarkIT test` com a chave no ambiente.
+Cada tentativa informa o caso, o método e a latência. A comparação registra acerto por campo,
+incluindo termos esperados na descrição, e calcula o custo por rascunho correto quando o consumo de todas as
+tentativas é conhecido. Falhas são registradas por código, e cada método continua enquanto couber no saldo. Os três WAVs adicionais são falas sintéticas
+sobre centavos e data relativa, categoria nova e valor ambíguo. O caso recording-2 fica fora da pontuação de valor,
+pois os dois gabaritos históricos discordam. A seleção definitiva do modelo depende dos resultados.
+Consulte a [comparação de preços e o protocolo](docs/pesquisa-piloto.md).
+
+## Deploy e recuperação
+
+A imagem Docker serve PWA e API na mesma origem, usa a porta de `PORT` (8080 por padrão)
+e inicia como usuário sem privilégios. Na plataforma escolhida, publique o Dockerfile com
+HTTPS do endereço fornecido, defina a conexão privada do PostgreSQL e mantenha
+`COOKIE_SECURE=true`. O nome de usuário usa `POSTGRES_USER` (padrão budgeting).
+Para um PostgreSQL gerenciado, use a URL JDBC e o modo TLS exigido pelo provedor.
+O Compose local expõe apenas a aplicação no loopback. Para uma VPS, encaminhe o HTTPS
+para essa porta. A publicação e o teste nos dois celulares aguardam a escolha do host.
+
+Para backup, use os utilitários cliente da versão do PostgreSQL do servidor. Exporte
+`PGHOST`, `PGUSER`, `PGDATABASE` e configure a autenticação do cliente.
+Rode `scripts/backup.sh /caminho/novo/piloto.dump`. Agende diariamente na hospedagem
+escolhida e envie a cópia criptografada ao armazenamento externo; a chave de recuperação
+deve ficar disponível fora do servidor. Para testar a recuperação, crie um banco vazio,
+aponte as variáveis para esse banco e execute `scripts/restore.sh /caminho/piloto.dump`.
+Confira contas, categorias e gastos antes de trocar a conexão da aplicação. Sessões antigas ficam fora do dump.
+
+A restauração encerra o orçamento de voz do mês UTC em curso, pois o dump pode anteceder
+chamadas já cobradas. O diário manual continua disponível e o orçamento volta no primeiro dia do mês seguinte.

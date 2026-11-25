@@ -1,4 +1,4 @@
-# Testa cada mudança. O núcleo traz só o job dos guardrails; cada stack em stacks/ traz os jobs dela.
+# Verifica os guardrails, a API e a PWA do piloto.
 name: CI
 
 on:
@@ -39,3 +39,42 @@ jobs:
         env:
           BASE: ${{ github.base_ref }}
           BRANCH: ${{ github.head_ref }}
+
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: budgeting
+          POSTGRES_USER: budgeting
+          POSTGRES_PASSWORD: ci-only
+        ports: ['5432:5432']
+        options: --health-cmd="pg_isready -U budgeting" --health-interval=5s --health-retries=12
+    env:
+      POSTGRES_PASSWORD: ci-only
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - run: ./mvnw -B verify
+  pwa:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser

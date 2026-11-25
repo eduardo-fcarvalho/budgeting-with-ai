@@ -1,0 +1,23 @@
+{
+  "name": "budgeting-pwa",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "lint": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test --test-isolation=none test/*.test.mjs",
+    "build": "npm run lint && vite build && node scripts/worker.mjs",
+    "test:browser": "playwright test"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.2.0"
+  }
+}

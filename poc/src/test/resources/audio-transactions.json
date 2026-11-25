@@ -1,0 +1,302 @@
+[
+  {
+    "audioFile": "recording-1.mp3",
+    "description": "Compra no mercado",
+    "amount": 8000,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-2.mp3",
+    "description": "Remédio na farmácia",
+    "amount": 4500,
+    "category": "PHARMA"
+  },
+  {
+    "audioFile": "recording-3.mp3",
+    "description": "Combustível no posto",
+    "amount": 12000,
+    "category": "AUTO"
+  },
+  {
+    "audioFile": "recording-4.mp3",
+    "description": "Almoço no restaurante",
+    "amount": 9000,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-5.mp3",
+    "description": "Consulta na clínica",
+    "amount": 20000,
+    "category": "PHARMA"
+  },
+  {
+    "audioFile": "recording-6.mp3",
+    "description": "Troca de óleo do carro",
+    "amount": 6500,
+    "category": "AUTO"
+  },
+  {
+    "audioFile": "recording-7.mp3",
+    "description": "Compra de frutas",
+    "amount": 3200,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-8.mp3",
+    "description": "Vitamina e pomada",
+    "amount": 7800,
+    "category": "PHARMA"
+  },
+  {
+    "audioFile": "recording-9.mp3",
+    "description": "Lavagem do carro",
+    "amount": 2800,
+    "category": "AUTO"
+  },
+  {
+    "audioFile": "recording-10.mp3",
+    "description": "Pão e leite na padaria",
+    "amount": 1500,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-11.mp3",
+    "description": "Medicamento controlado",
+    "amount": 9600,
+    "category": "PHARMA"
+  },
+  {
+    "audioFile": "recording-12.mp3",
+    "description": "Pneu do carro",
+    "amount": 34000,
+    "category": "AUTO"
+  },
+  {
+    "audioFile": "recording-13.mp3",
+    "description": "Café da manhã fora",
+    "amount": 2400,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-14.mp3",
+    "description": "Exame laboratorial",
+    "amount": 15800,
+    "category": "PHARMA"
+  },
+  {
+    "audioFile": "recording-15.mp3",
+    "description": "Estacionamento do carro",
+    "amount": 1800,
+    "category": "AUTO"
+  },
+  {
+    "audioFile": "recording-16.mp3",
+    "description": "Compra de legumes",
+    "amount": 4100,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-17.mp3",
+    "description": "Antibiótico da farmácia",
+    "amount": 11200,
+    "category": "PHARMA"
+  },
+  {
+    "audioFile": "recording-18.mp3",
+    "description": "Revisão do veículo",
+    "amount": 27500,
+    "category": "AUTO"
+  },
+  {
+    "audioFile": "recording-19.mp3",
+    "description": "Jantar no mercado",
+    "amount": 7300,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-20.mp3",
+    "description": "Curativo e medicamento",
+    "amount": 5300,
+    "category": "PHARMA"
+  },
+  {
+    "audioFile": "recording-21.mp3",
+    "description": "Combustível da semana",
+    "amount": 15000,
+    "category": "AUTO"
+  },
+  {
+    "audioFile": "recording-22.mp3",
+    "description": "Arroz e feijão",
+    "amount": 8900,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-23.mp3",
+    "description": "Creme e vitamina",
+    "amount": 6100,
+    "category": "PHARMA"
+  },
+  {
+    "audioFile": "recording-24.mp3",
+    "description": "Troca de bateria",
+    "amount": 42000,
+    "category": "AUTO"
+  },
+  {
+    "audioFile": "recording-25.mp3",
+    "description": "Salgados para casa",
+    "amount": 2600,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-26.mp3",
+    "description": "Consulta odontológica",
+    "amount": 30000,
+    "category": "PHARMA"
+  },
+  {
+    "audioFile": "recording-27.mp3",
+    "description": "Manutenção dos freios",
+    "amount": 51000,
+    "category": "AUTO"
+  },
+  {
+    "audioFile": "recording-28.mp3",
+    "description": "Verduras da feira",
+    "amount": 3600,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-29.mp3",
+    "description": "Xarope na farmácia",
+    "amount": 4700,
+    "category": "PHARMA"
+  },
+  {
+    "audioFile": "recording-30.mp3",
+    "description": "Alinhamento do carro",
+    "amount": 2200,
+    "category": "AUTO"
+  },
+  {
+    "audioFile": "recording-31.mp3",
+    "description": "Bebidas e snacks",
+    "amount": 9800,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-32.mp3",
+    "description": "Inalador e remédio",
+    "amount": 13400,
+    "category": "PHARMA"
+  },
+  {
+    "audioFile": "recording-33.mp3",
+    "description": "Seguro do carro",
+    "amount": 89000,
+    "category": "AUTO"
+  },
+  {
+    "audioFile": "recording-34.mp3",
+    "description": "Massa e molho",
+    "amount": 5600,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-35.mp3",
+    "description": "Teste de glicemia",
+    "amount": 7200,
+    "category": "PHARMA"
+  },
+  {
+    "audioFile": "recording-36.mp3",
+    "description": "Pintura do carro",
+    "amount": 46000,
+    "category": "AUTO"
+  },
+  {
+    "audioFile": "recording-37.mp3",
+    "description": "Cereal e iogurte",
+    "amount": 3100,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-38.mp3",
+    "description": "Vacina e consulta",
+    "amount": 25000,
+    "category": "PHARMA"
+  },
+  {
+    "audioFile": "recording-39.mp3",
+    "description": "Pedágio da viagem",
+    "amount": 1200,
+    "category": "AUTO"
+  },
+  {
+    "audioFile": "recording-40.mp3",
+    "description": "Queijo e presunto",
+    "amount": 4400,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-41.mp3",
+    "description": "Colírio da farmácia",
+    "amount": 5100,
+    "category": "PHARMA"
+  },
+  {
+    "audioFile": "recording-42.mp3",
+    "description": "Licenciamento do carro",
+    "amount": 38000,
+    "category": "AUTO"
+  },
+  {
+    "audioFile": "recording-43.mp3",
+    "description": "Doces e biscoitos",
+    "amount": 6700,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-44.mp3",
+    "description": "Pomada cicatrizante",
+    "amount": 8300,
+    "category": "PHARMA"
+  },
+  {
+    "audioFile": "recording-45.mp3",
+    "description": "Conserto do ar do carro",
+    "amount": 29000,
+    "category": "AUTO"
+  },
+  {
+    "audioFile": "recording-46.mp3",
+    "description": "Pão integral",
+    "amount": 2100,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-47.mp3",
+    "description": "Spray nasal",
+    "amount": 3900,
+    "category": "PHARMA"
+  },
+  {
+    "audioFile": "recording-48.mp3",
+    "description": "Bateria do carro",
+    "amount": 54000,
+    "category": "AUTO"
+  },
+  {
+    "audioFile": "recording-49.mp3",
+    "description": "Lanches da semana",
+    "amount": 7600,
+    "category": "GROCERIES"
+  },
+  {
+    "audioFile": "recording-50.mp3",
+    "description": "Anti-inflamatório",
+    "amount": 6400,
+    "category": "PHARMA"
+  }
+]
