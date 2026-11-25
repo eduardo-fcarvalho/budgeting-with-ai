@@ -262,7 +262,7 @@ test("atalho da PWA em primeiro plano usa o microfone já autorizado", async ({
   expect(profiles.get(account).size).toBe(0);
 });
 
-test("gastos e gráficos acompanham o período e o filtro por categoria", async ({
+test("totais por categoria acompanham o período e filtram o histórico", async ({
   page,
 }) => {
   account = null;
@@ -280,6 +280,10 @@ test("gastos e gráficos acompanham o período e o filtro por categoria", async 
   await page.clock.setFixedTime(new Date(2026, 2, 15, 12));
   await page.goto(url);
   await login(page, "periodo@example.test");
+  const categories = page.getByRole("region", { name: "Por categoria" });
+  const food = categories.getByRole("button", { name: /Alimentação/ });
+  const transport = categories.getByRole("button", { name: /Transporte/ });
+  const market = categories.getByRole("button", { name: /Mercado/ });
   const lunch = page.getByRole("heading", { name: "Almoço de domingo" });
   const bus = page.getByRole("heading", { name: "Ônibus de segunda" });
   const coffee = page.getByRole("heading", { name: "Café da semana anterior" });
@@ -287,22 +291,28 @@ test("gastos e gráficos acompanham o período e o filtro por categoria", async 
   await expect(lunch).toBeVisible();
   await expect(coffee).toBeVisible();
   await expect(groceries).toHaveCount(0);
+  await expect(food).toContainText("70,00");
+  await expect(transport).toContainText("12,5%");
+  await expect(categories.getByRole("button")).toHaveCount(2);
 
   await page.getByRole("button", { name: "Diário", exact: true }).click();
   await expect(lunch).toBeVisible();
   await expect(bus).toHaveCount(0);
+  await expect(food).toContainText("50,00");
+  await expect(food).toContainText("100%");
+  await expect(transport).toHaveCount(0);
   await page.getByRole("button", { name: "Semanal", exact: true }).click();
   await expect(bus).toBeVisible();
   await expect(coffee).toHaveCount(0);
+  await expect(food).toContainText("83,3%");
+  await expect(transport).toContainText("10,00");
   await page.getByRole("button", { name: "Anual", exact: true }).click();
   await expect(groceries).toBeVisible();
+  await expect(food).toContainText("63,6%");
+  await expect(market).toContainText("30,00");
 
-  for (const chart of ["Barras", "Pizza", "Rosca"]) {
-    const button = page.getByRole("button", { name: chart, exact: true });
-    await button.click();
-    await expect(button).toHaveAttribute("aria-pressed", "true");
-  }
-  await page.getByRole("button", { name: /Alimentação/ }).click();
+  await food.click();
+  await expect(food).toHaveAttribute("aria-pressed", "true");
   await expect(lunch).toBeVisible();
   await expect(coffee).toBeVisible();
   await expect(bus).toHaveCount(0);
@@ -311,8 +321,42 @@ test("gastos e gráficos acompanham o período e o filtro por categoria", async 
   await page.getByRole("button", { name: "Mensal", exact: true }).click();
   await page.getByLabel("Selecionar mês").fill("2026-01");
   await expect(groceries).toBeVisible();
+  await expect(market).toContainText("100%");
   await page.getByRole("button", { name: "Próximo mês" }).click();
   await expect(groceries).toHaveCount(0);
+  await expect(categories.getByText("Sem gastos neste período.")).toBeVisible();
   await page.getByRole("button", { name: "Mês anterior" }).click();
   await expect(groceries).toBeVisible();
+});
+
+test("tema segue o sistema e lembra a escolha no diário e no login", async ({
+  page,
+}) => {
+  account = null;
+  await page.setViewportSize({ width: 320, height: 760 });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto(url);
+  const toggle = page.getByRole("button", { name: "Tema escuro" });
+  const root = page.locator("html");
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(root).toHaveCSS("color-scheme", "dark");
+
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await toggle.click();
+  await login(page, "tema@example.test");
+  await expect(page.getByRole("heading", { name: "Meus gastos" })).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(root).toHaveCSS("color-scheme", "dark");
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Meus gastos" })).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Sair", exact: true }).click();
+  await expect(page.getByLabel("E-mail")).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await toggle.click();
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(root).toHaveCSS("color-scheme", "light");
 });

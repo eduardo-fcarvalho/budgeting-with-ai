@@ -15,6 +15,7 @@ import {
   type Period,
 } from "./domain";
 import { record } from "./microphone";
+import { ThemeToggle } from "./ThemeToggle";
 import { useDiary } from "./useDiary";
 import {
   canStartShortcutRecording,
@@ -91,7 +92,10 @@ function Login({ diary }: { diary: Diary }) {
   return (
     <main className="login">
       <div className="login-panel">
-        <Brand />
+        <div className="heading">
+          <Brand />
+          <ThemeToggle />
+        </div>
         <h1>Entrar</h1>
         <form onSubmit={submit}>
           <label>
@@ -517,6 +521,7 @@ function Book({ diary }: { diary: Diary }) {
             {!busy && (
               <span className="connection">{online ? "Online" : "Offline"}</span>
             )}
+            <ThemeToggle />
             <button className="text" onClick={() => void diary.logout()}>
               Sair
             </button>
