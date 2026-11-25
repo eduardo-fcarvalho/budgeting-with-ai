@@ -7,6 +7,7 @@ const profiles = new Map();
 let account = null;
 let server;
 let url;
+let shellRevision = "";
 test.beforeAll(async () => {
   // Fictitious single browser session. Data reads also assert the active owner.
   server = createServer(async (req, res) => {
@@ -67,6 +68,17 @@ test.beforeAll(async () => {
     try {
       const file = path === "/" ? "index.html" : path.slice(1);
       const bytes = await readFile(new URL("../dist/" + file, import.meta.url));
+      let body = bytes;
+      if (shellRevision && file === "index.html") {
+        body = bytes
+          .toString()
+          .replace("</title>", ` (${shellRevision})</title>`);
+      }
+      if (shellRevision && file === "sw.js") {
+        body = bytes
+          .toString()
+          .replace(/(const name = "[^"]+)(";)/, `$1-${shellRevision}$2`);
+      }
       const types = {
         ".html": "text/html",
         ".js": "text/javascript",
@@ -77,7 +89,7 @@ test.beforeAll(async () => {
       res.writeHead(200, {
         "Content-Type": types[extname(file)] || "application/octet-stream",
       });
-      res.end(bytes);
+      res.end(body);
     } catch {
       res.writeHead(404);
       res.end();
@@ -359,4 +371,38 @@ test("tema segue o sistema e lembra a escolha no diário e no login", async ({
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
   await expect(root).toHaveCSS("color-scheme", "light");
+});
+
+test("recarregar recebe a nova versão mesmo com outra aba aberta", async ({
+  page,
+  context,
+}) => {
+  account = null;
+  await page.goto(url);
+  const originalTitle = await page.title();
+  await expect
+    .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller))
+    .toBeTruthy();
+  const second = await context.newPage();
+  await second.goto(url);
+
+  shellRevision = "atualizada";
+  try {
+    await page.reload();
+    await expect(page).toHaveTitle(`${originalTitle} (atualizada)`);
+    await expect(second).toHaveTitle(originalTitle);
+    await expect.poll(() =>
+      page.evaluate(async () => {
+        const shells = (await caches.keys()).filter((key) =>
+          key.startsWith("budgeting-shell-"),
+        );
+        return shells.length === 1 && shells[0].endsWith("-atualizada");
+      }),
+    ).toBeTruthy();
+    await context.setOffline(true);
+    await page.reload();
+    await expect(page).toHaveTitle(`${originalTitle} (atualizada)`);
+  } finally {
+    shellRevision = "";
+  }
 });
