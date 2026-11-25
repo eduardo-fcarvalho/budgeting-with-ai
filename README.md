@@ -350,3 +350,9 @@ src/main/java/com/eduardo/budgeting/
 
 - GitHub: https://github.com/eduardo-fcarvalho  
 - LinkedIn: https://www.linkedin.com/in/eduardo-carvalho-25632b98/
+
+## Piloto da PWA
+
+O próximo marco é um diário de gastos com login, histórico privado e consulta offline.
+Consulte o [briefing](docs/briefing.md), o [status](docs/versoes/piloto.md)
+e a [pesquisa de voz e hospedagem](docs/pesquisa-piloto.md).
