@@ -209,7 +209,17 @@ function Recorder({
     abortRef.current = session;
     try {
       const stop = await record(
-        () => void finish(),
+        () => {
+          if (session.signal.aborted) return;
+          if (!fromShortcut) {
+            void finish();
+            return;
+          }
+          cancel();
+          setError(
+            "A gravação foi encerrada. Toque em Gravar gasto para tentar novamente.",
+          );
+        },
         session.signal,
         fromShortcut,
       );

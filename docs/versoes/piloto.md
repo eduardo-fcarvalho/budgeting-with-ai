@@ -52,4 +52,6 @@ da `main` está em prévia local para Eduardo avaliar o frontend antes de decidi
   o histórico. A semana começa na segunda-feira. A legenda do gráfico filtra o histórico por categoria.
 - Nas instalações que exibem atalhos no ícone da PWA, **Gravar gasto** abre a tela de voz.
   A captura automática requer permissão já concedida e suporte do navegador. Quando o navegador
-  exige interação, o botão da tela inicia a captura. O rascunho segue para conferência antes da confirmação.
+  exige interação, o botão da tela inicia a captura. Pelo atalho, o áudio só é enviado ao tocar em
+  **Parar e interpretar**. Sair da tela ou atingir o limite de 30 segundos descarta a captura automática.
+  O rascunho segue para conferência antes da confirmação.

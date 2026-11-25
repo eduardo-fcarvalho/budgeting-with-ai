@@ -225,6 +225,10 @@ test("atalho da PWA em primeiro plano usa o microfone já autorizado", async ({
   context,
 }) => {
   account = null;
+  let audioRequests = 0;
+  page.on("request", (request) => {
+    if (request.url() === url + "/api/drafts") audioRequests++;
+  });
   await context.grantPermissions(["microphone"], { origin: url });
   await page.addInitScript(() => {
     const original = window.matchMedia.bind(window);
@@ -234,10 +238,27 @@ test("atalho da PWA em primeiro plano usa o microfone já autorizado", async ({
   await page.goto(url);
   await login(page, "instalado@example.test");
   await expect(page.getByRole("button", { name: "Novo gasto" })).toBeEnabled();
+  const stop = page.getByRole("button", { name: "Parar e interpretar" });
+  const start = page.getByRole("button", { name: "Gravar gasto", exact: true });
   await page.goto(url + "/?acao=gravar");
-  await expect(page.getByRole("button", { name: "Parar e interpretar" })).toBeEnabled();
+  await expect(stop).toBeEnabled();
   await page.getByRole("button", { name: "Cancelar gravação" }).click();
-  await expect(page.getByRole("button", { name: "Gravar gasto", exact: true })).toBeEnabled();
+  await expect(start).toBeEnabled();
+
+  await page.clock.install();
+  await page.goto(url + "/?acao=gravar");
+  await expect(stop).toBeEnabled();
+  await page.clock.fastForward(30_001);
+  await expect(start).toBeEnabled();
+
+  await page.goto(url + "/?acao=gravar");
+  await expect(stop).toBeEnabled();
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { value: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect(start).toBeEnabled();
+  expect(audioRequests).toBe(0);
   expect(profiles.get(account).size).toBe(0);
 });
 

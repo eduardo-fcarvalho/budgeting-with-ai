@@ -7,6 +7,8 @@ export async function record(
 ) {
   if (!navigator.mediaDevices?.getUserMedia || !window.AudioContext)
     throw new Error("Microfone indisponível. Você pode digitar o gasto.");
+  if (fromShortcut && document.hidden)
+    throw new Error("Toque em Gravar gasto para ativar o microfone.");
   const context = new AudioContext();
   let stream: MediaStream | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -14,6 +16,9 @@ export async function record(
   const chunks: Float32Array[] = [];
   let size = 0;
   let closed = false;
+  function stopWhenHidden() {
+    if (document.hidden) onLimit();
+  }
   function release() {
     closed = true;
     clearTimeout(timer);
@@ -21,8 +26,11 @@ export async function record(
     stream?.getTracks().forEach((track) => track.stop());
     if (context.state !== "closed") void context.close().catch(() => {});
     signal.removeEventListener("abort", release);
+    document.removeEventListener("visibilitychange", stopWhenHidden);
   }
   signal.addEventListener("abort", release, { once: true });
+  if (fromShortcut)
+    document.addEventListener("visibilitychange", stopWhenHidden);
   try {
     const resumed = fromShortcut
       ? Promise.race([
