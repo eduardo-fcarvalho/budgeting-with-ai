@@ -43,3 +43,13 @@ da `main` está em prévia local para Eduardo avaliar o frontend antes de decidi
 3. A escolha definitiva do modelo de voz depende do ensaio com a chave da OpenAI. Medir acerto em
    português, latência e custo por rascunho correto dentro do teto compartilhado.
    [Ensaio de voz](../../README.md#voz-e-experimento-pago)
+
+## Interface e análise por categoria
+
+- O lançamento manual abre pelo botão central no celular. O formulário permite reutilizar uma
+  categoria pessoal ou digitar uma nova.
+- O resumo começa no mês corrente. Os períodos diário, semanal, mensal e anual também controlam
+  o histórico. A semana começa na segunda-feira. A legenda do gráfico filtra o histórico por categoria.
+- Nas instalações que exibem atalhos no ícone da PWA, **Gravar gasto** abre a tela de voz.
+  A captura automática requer permissão já concedida e suporte do navegador. Quando o navegador
+  exige interação, o botão da tela inicia a captura. O rascunho segue para conferência antes da confirmação.

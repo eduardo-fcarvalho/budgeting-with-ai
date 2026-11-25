@@ -5,6 +5,9 @@ Diário pessoal de gastos em reais, com conferência de lançamentos ditados e c
 O piloto foi mesclado e está em avaliação local. A aprovação do frontend por Eduardo vem antes da publicação.
 Consulte o [registro do piloto](docs/versoes/piloto.md) e o [briefing](docs/briefing.md).
 
+No celular, **Novo gasto** abre o formulário manual. O painel mostra o total por dia, semana, mês ou ano,
+com gráficos de rosca, barras e pizza e filtro do histórico por categoria pessoal.
+
 ## Rodar o piloto
 
 Use Docker Compose e defina `POSTGRES_PASSWORD` no ambiente ou em uma cópia local de

@@ -10,7 +10,7 @@ let url;
 test.beforeAll(async () => {
   // Fictitious single browser session. Data reads also assert the active owner.
   server = createServer(async (req, res) => {
-    const path = req.url;
+    const { pathname: path } = new URL(req.url, "http://localhost");
     if (path.startsWith("/api/")) {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
@@ -90,21 +90,24 @@ test.afterAll(async () => {
   await new Promise((resolve) => server.close(resolve));
 });
 
+async function login(page, email) {
+  await page.getByLabel("E-mail").fill(email);
+  await page.getByLabel("Senha").fill("somente-teste");
+  await page.getByRole("button", { name: "Acessar meu diário" }).click();
+}
+
 test("consulta offline e logout eliminam o histórico em todas as abas", async ({
   page,
   context,
 }) => {
-  async function login(email) {
-    await page.getByLabel("E-mail").fill(email);
-    await page.getByLabel("Senha").fill("somente-teste");
-    await page.getByRole("button", { name: "Acessar meu diário" }).click();
-    await expect(
-      page.getByRole("button", { name: "Novo gasto" }),
-    ).toBeEnabled();
-  }
   await page.goto(url);
-  await login("a@example.test");
-  await page.getByRole("button", { name: "Novo gasto" }).click();
+  await login(page, "a@example.test");
+  const add = page.getByRole("button", { name: "Novo gasto" });
+  await expect(add).toBeEnabled();
+  const bounds = await add.boundingBox();
+  expect(bounds.x + bounds.width / 2).toBeCloseTo(page.viewportSize().width / 2, 0);
+  await add.click();
+  await expect(page.getByLabel("Valor (R$)", { exact: true })).toBeFocused();
   await page.getByLabel("Descrição").fill("Almoço de teste");
   await page.getByLabel("Valor (R$)", { exact: true }).fill("42,90");
   await page.getByLabel("Categoria", { exact: true }).fill("Restaurantes");
@@ -138,7 +141,7 @@ test("consulta offline e logout eliminam o histórico em todas as abas", async (
   await expect(second.getByLabel("E-mail")).toBeVisible();
   await context.setOffline(false);
   await expect.poll(() => account).toBeNull();
-  await login("b@example.test");
+  await login(page, "b@example.test");
   await expect(
     page.getByText("Nenhum gasto em", { exact: false }),
   ).toBeVisible();
@@ -166,9 +169,7 @@ test("voz abre rascunho editável e descartar mantém o histórico intacto", asy
   account = null;
   await context.grantPermissions(["microphone"], { origin: url });
   await page.goto(url);
-  await page.getByLabel("E-mail").fill("voz@example.test");
-  await page.getByLabel("Senha").fill("somente-teste");
-  await page.getByRole("button", { name: "Acessar meu diário" }).click();
+  await login(page, "voz@example.test");
   await page.getByRole("button", { name: "Novo gasto" }).click();
   await page.getByRole("button", { name: "Gravar gasto" }).click();
   const stop = page.getByRole("button", { name: "Parar e interpretar" });
@@ -188,4 +189,109 @@ test("voz abre rascunho editável e descartar mantém o histórico intacto", asy
   await expect(
     page.getByText("Nenhum gasto em", { exact: false }),
   ).toBeVisible();
+});
+
+test("atalho do manifesto abre a voz e preserva a alternativa de um toque", async ({
+  page,
+  context,
+}) => {
+  account = null;
+  await page.goto(url);
+  const response = await page.request.get(url + "/manifest.webmanifest");
+  const manifest = await response.json();
+  const shortcut = manifest.shortcuts.find(({ name }) => name === "Gravar gasto");
+  expect(shortcut).toBeDefined();
+
+  await page.goto(new URL(shortcut.url, url).href);
+  await login(page, "atalho@example.test");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  const start = page.getByRole("button", { name: "Gravar gasto", exact: true });
+  await expect(start).toBeFocused();
+  await expect(page).toHaveURL(url + "/");
+  await page.getByRole("button", { name: "Fechar", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await expect
+    .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller))
+    .toBeTruthy();
+  await context.setOffline(true);
+  await page.goto(new URL(shortcut.url, url).href);
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(start).toBeDisabled();
+});
+
+test("atalho da PWA em primeiro plano usa o microfone já autorizado", async ({
+  page,
+  context,
+}) => {
+  account = null;
+  await context.grantPermissions(["microphone"], { origin: url });
+  await page.addInitScript(() => {
+    const original = window.matchMedia.bind(window);
+    window.matchMedia = (query) =>
+      query === "(display-mode: standalone)" ? { matches: true } : original(query);
+  });
+  await page.goto(url);
+  await login(page, "instalado@example.test");
+  await expect(page.getByRole("button", { name: "Novo gasto" })).toBeEnabled();
+  await page.goto(url + "/?acao=gravar");
+  await expect(page.getByRole("button", { name: "Parar e interpretar" })).toBeEnabled();
+  await page.getByRole("button", { name: "Cancelar gravação" }).click();
+  await expect(page.getByRole("button", { name: "Gravar gasto", exact: true })).toBeEnabled();
+  expect(profiles.get(account).size).toBe(0);
+});
+
+test("gastos e gráficos acompanham o período e o filtro por categoria", async ({
+  page,
+}) => {
+  account = null;
+  const fixtures = [
+    ["2026-03-15", "Almoço de domingo", 5000, "Alimentação"],
+    ["2026-03-09", "Ônibus de segunda", 1000, "Transporte"],
+    ["2026-03-08", "Café da semana anterior", 2000, "Alimentação"],
+    ["2026-01-21", "Mercado de janeiro", 3000, "Mercado"],
+  ];
+  const rows = fixtures.map(([date, description, amount, category], index) => {
+    const id = String(index);
+    return [id, { id, date, description, amount, category }];
+  });
+  profiles.set("periodo@example.test", new Map(rows));
+  await page.clock.setFixedTime(new Date(2026, 2, 15, 12));
+  await page.goto(url);
+  await login(page, "periodo@example.test");
+  const lunch = page.getByRole("heading", { name: "Almoço de domingo" });
+  const bus = page.getByRole("heading", { name: "Ônibus de segunda" });
+  const coffee = page.getByRole("heading", { name: "Café da semana anterior" });
+  const groceries = page.getByRole("heading", { name: "Mercado de janeiro" });
+  await expect(lunch).toBeVisible();
+  await expect(coffee).toBeVisible();
+  await expect(groceries).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Diário", exact: true }).click();
+  await expect(lunch).toBeVisible();
+  await expect(bus).toHaveCount(0);
+  await page.getByRole("button", { name: "Semanal", exact: true }).click();
+  await expect(bus).toBeVisible();
+  await expect(coffee).toHaveCount(0);
+  await page.getByRole("button", { name: "Anual", exact: true }).click();
+  await expect(groceries).toBeVisible();
+
+  for (const chart of ["Barras", "Pizza", "Rosca"]) {
+    const button = page.getByRole("button", { name: chart, exact: true });
+    await button.click();
+    await expect(button).toHaveAttribute("aria-pressed", "true");
+  }
+  await page.getByRole("button", { name: /Alimentação/ }).click();
+  await expect(lunch).toBeVisible();
+  await expect(coffee).toBeVisible();
+  await expect(bus).toHaveCount(0);
+  await page.getByRole("button", { name: "Limpar filtro" }).click();
+  await expect(bus).toBeVisible();
+  await page.getByRole("button", { name: "Mensal", exact: true }).click();
+  await page.getByLabel("Selecionar mês").fill("2026-01");
+  await expect(groceries).toBeVisible();
+  await page.getByRole("button", { name: "Próximo mês" }).click();
+  await expect(groceries).toHaveCount(0);
+  await page.getByRole("button", { name: "Mês anterior" }).click();
+  await expect(groceries).toBeVisible();
 });

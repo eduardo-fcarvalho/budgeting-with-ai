@@ -1,6 +1,10 @@
 import { encodeWav } from "./wav";
 
-export async function record(onLimit: () => void, signal: AbortSignal) {
+export async function record(
+  onLimit: () => void,
+  signal: AbortSignal,
+  fromShortcut = false,
+) {
   if (!navigator.mediaDevices?.getUserMedia || !window.AudioContext)
     throw new Error("Microfone indisponível. Você pode digitar o gasto.");
   const context = new AudioContext();
@@ -20,7 +24,18 @@ export async function record(onLimit: () => void, signal: AbortSignal) {
   }
   signal.addEventListener("abort", release, { once: true });
   try {
-    const resumed = context.resume();
+    const resumed = fromShortcut
+      ? Promise.race([
+          context.resume(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () =>
+                reject(new Error("Toque em Gravar gasto para ativar o microfone.")),
+              2000,
+            );
+          }),
+        ])
+      : context.resume();
     // Wait for permission in parallel with the user-gesture resume.
     await Promise.all([
       resumed,
@@ -31,6 +46,7 @@ export async function record(onLimit: () => void, signal: AbortSignal) {
           if (closed) s.getTracks().forEach((track) => track.stop());
         }),
     ]);
+    clearTimeout(timer);
     signal.throwIfAborted();
     await context.audioWorklet.addModule("/recorder.js");
     signal.throwIfAborted();

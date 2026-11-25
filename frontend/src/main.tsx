@@ -1,30 +1,68 @@
 import { createRoot } from "react-dom/client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { message } from "./api";
+import { Breakdown, CategoryDot } from "./Breakdown";
 import {
   cents,
   localDate,
   money,
-  monthRows,
+  movePeriod,
+  periodBounds,
+  periodRows,
   totals,
   type Draft,
   type Expense,
+  type Period,
 } from "./domain";
 import { record } from "./microphone";
 import { useDiary } from "./useDiary";
+import {
+  canStartShortcutRecording,
+  consumeVoiceShortcut,
+} from "./voiceShortcut";
 import "./style.css";
 
-const monthName = (month: string) =>
-  new Date(month + "-15T12:00:00").toLocaleDateString("pt-BR", {
-    month: "long",
-    year: "numeric",
-  });
+const periodOptions = [
+  { value: "day", label: "Diário", previous: "Dia anterior", next: "Próximo dia" },
+  {
+    value: "week",
+    label: "Semanal",
+    previous: "Semana anterior",
+    next: "Próxima semana",
+  },
+  {
+    value: "month",
+    label: "Mensal",
+    previous: "Mês anterior",
+    next: "Próximo mês",
+  },
+  { value: "year", label: "Anual", previous: "Ano anterior", next: "Próximo ano" },
+] as const;
+
+function periodName(period: Period, date: string) {
+  const { start, end } = periodBounds(period, date);
+  if (period === "year") return String(start.getFullYear());
+  if (period === "month")
+    return start.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  if (period === "week")
+    return new Intl.DateTimeFormat("pt-BR", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }).formatRange(start, end);
+  return start.toLocaleDateString("pt-BR", { dateStyle: "long" });
+}
+
 const dayName = (date: string) =>
   new Date(date + "T12:00:00").toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "short",
   });
 type Diary = ReturnType<typeof useDiary>;
+type OpenEditor = {
+  expense: Expense | null;
+  mode: "manual" | "voice" | "shortcut";
+};
 
 function Brand() {
   return (
@@ -76,7 +114,7 @@ function Login({ diary }: { diary: Diary }) {
             />
           </label>
           <button type="submit" className="primary" disabled={diary.busy}>
-            Acessar meu diário <span aria-hidden="true">→</span>
+            Acessar meu diário
           </button>
         </form>
         {(error || diary.notice) && (
@@ -105,22 +143,42 @@ async function withMessage(
 function Recorder({
   diary,
   onDraft,
+  focus,
+  automatic,
 }: {
   diary: Diary;
   onDraft: (draft: Draft) => void;
+  focus: boolean;
+  automatic: boolean;
 }) {
   const [state, setState] = useState<
     "idle" | "starting" | "recording" | "sending"
   >("idle");
   const [error, setError] = useState("");
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const stopRef = useRef<(() => Blob) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  useEffect(
-    () => () => {
+  const startedRef = useRef(false);
+  useEffect(() => {
+    let mounted = true;
+    if (automatic)
+      void canStartShortcutRecording().then(
+        (allowed) => {
+          if (
+            allowed &&
+            mounted &&
+            !startedRef.current &&
+            document.activeElement === buttonRef.current
+          )
+            void start(true);
+        },
+        () => {},
+      );
+    return () => {
+      mounted = false;
       abortRef.current?.abort();
-    },
-    [],
-  );
+    };
+  }, [automatic]);
   async function finish() {
     const stop = stopRef.current;
     const session = abortRef.current;
@@ -136,43 +194,61 @@ function Recorder({
     } catch (err) {
       if (!session?.signal.aborted) setError(message(err));
     } finally {
-      if (!session?.signal.aborted) setState("idle");
+      if (!session?.signal.aborted) {
+        abortRef.current = null;
+        setState("idle");
+      }
     }
   }
-  async function start() {
+  async function start(fromShortcut = false) {
+    if (abortRef.current) return;
+    startedRef.current = true;
     setError("");
     setState("starting");
     const session = new AbortController();
     abortRef.current = session;
     try {
-      stopRef.current = await record(() => void finish(), session.signal);
-      if (!session.signal.aborted) setState("recording");
+      const stop = await record(
+        () => void finish(),
+        session.signal,
+        fromShortcut,
+      );
+      if (!session.signal.aborted) {
+        stopRef.current = stop;
+        setState("recording");
+      }
     } catch (err) {
       if (session.signal.aborted) return;
       setError(
         err instanceof DOMException && err.name === "NotAllowedError"
-          ? "Permita o uso do microfone ou digite os campos abaixo."
+          ? "Permita o uso do microfone ou preencha o formulário."
           : message(err),
       );
+      abortRef.current = null;
       setState("idle");
     }
   }
   function cancel() {
     abortRef.current?.abort();
+    abortRef.current = null;
     stopRef.current = null;
     setState("idle");
   }
+  const unavailable =
+    state === "starting" ||
+    state === "sending" ||
+    (!diary.online && state === "idle");
   return (
-    <div className="voice">
+    <div className={focus ? "voice voice-first" : "voice"}>
       <button
         type="button"
+        ref={buttonRef}
+        data-editor-focus={focus && diary.online ? "" : undefined}
         className={"secondary" + (state === "recording" ? " recording" : "")}
-        disabled={
-          state === "starting" ||
-          state === "sending" ||
-          (!diary.online && state === "idle")
-        }
-        onClick={() => void (state === "recording" ? finish() : start())}
+        aria-disabled={unavailable}
+        onClick={() => {
+          if (!unavailable) void (state === "recording" ? finish() : start());
+        }}
       >
         {state === "idle"
           ? "Gravar gasto"
@@ -190,6 +266,14 @@ function Recorder({
       {state === "recording" && (
         <small role="status">Gravando · até 30 segundos</small>
       )}
+      {!diary.online && (
+        <small
+          data-editor-focus={focus ? "" : undefined}
+          tabIndex={focus ? -1 : undefined}
+        >
+          A gravação precisa de conexão.
+        </small>
+      )}
       {error && <p role="alert">{error}</p>}
     </div>
   );
@@ -197,10 +281,12 @@ function Recorder({
 function Editor({
   diary,
   expense,
+  mode,
   done,
 }: {
   diary: Diary;
-  expense: Expense | null;
+  expense: OpenEditor["expense"];
+  mode: OpenEditor["mode"];
   done: () => void;
 }) {
   const [id] = useState(() => expense?.id || crypto.randomUUID());
@@ -216,6 +302,7 @@ function Editor({
   useEffect(() => {
     const dialog = modal.current!;
     dialog.showModal();
+    dialog.querySelector<HTMLElement>("[data-editor-focus]")?.focus();
     return () => {
       dialog.close();
     };
@@ -261,6 +348,14 @@ function Editor({
       setSaving(false);
     }
   }
+  const recorder = !expense && (
+    <Recorder
+      diary={diary}
+      onDraft={applyDraft}
+      focus={mode !== "manual"}
+      automatic={mode === "shortcut"}
+    />
+  );
   return (
     <dialog
       ref={modal}
@@ -282,22 +377,14 @@ function Editor({
           ×
         </button>
       </div>
-      {!expense && <Recorder diary={diary} onDraft={applyDraft} />}
+      {mode !== "manual" && recorder}
       <form onSubmit={submit}>
-        <label>
-          Descrição
-          <input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            required
-            maxLength={240}
-          />
-        </label>
         <div className="fields">
           <label>
             Valor (R$)
             <input
               value={price}
+              data-editor-focus={mode === "manual" ? "" : undefined}
               placeholder="0,00"
               inputMode="decimal"
               onChange={(e) => setPrice(e.target.value)}
@@ -315,6 +402,15 @@ function Editor({
           </label>
         </div>
         <label>
+          Descrição
+          <input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            required
+            maxLength={240}
+          />
+        </label>
+        <label>
           Categoria
           <input
             list="cats"
@@ -329,6 +425,24 @@ function Editor({
             <option key={c} value={c} />
           ))}
         </datalist>
+        {diary.data?.categories.length ? (
+          <div
+            className="category-picks"
+            role="group"
+            aria-label="Categorias pessoais"
+          >
+            {diary.data.categories.map((name) => (
+              <button
+                key={name}
+                type="button"
+                aria-pressed={category === name}
+                onClick={() => setCategory(name)}
+              >
+                <CategoryDot category={name} /> {name}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {category.trim() &&
           !diary.data?.categories.some(
             (c) =>
@@ -352,47 +466,81 @@ function Editor({
               : "Confirmar gasto"}
         </button>
       </form>
+      {mode === "manual" && recorder}
     </dialog>
   );
 }
 
 function Book({ diary }: { diary: Diary }) {
-  const [month, setMonth] = useState(() => localDate().slice(0, 7));
-  const [editor, setEditor] = useState<Expense | null | undefined>(undefined);
+  const [period, setPeriod] = useState<Period>("month");
+  const [date, setDate] = useState(localDate);
+  const [category, setCategory] = useState<string | null>(null);
+  const [editor, setEditor] = useState<OpenEditor | null>(null);
   const [notice, setNotice] = useState("");
   const [deleting, setDeleting] = useState<string | null>(null);
-  const data = diary.data;
-  const rows = monthRows(data?.expenses || [], month);
+  const { busy, data, online } = diary;
+  const rows = periodRows(data?.expenses || [], period, date);
   const groups = totals(rows);
   const total = groups.reduce((sum, [, value]) => sum + value, 0);
-  function moveMonth(step: number) {
-    const first = new Date(month + "-15T12:00:00");
-    first.setMonth(first.getMonth() + step);
-    setMonth(localDate(first).slice(0, 7));
+  const visibleRows = category
+    ? rows.filter((row) => row.category === category)
+    : rows;
+  const currentPeriod = periodOptions.find(({ value }) => value === period)!;
+  const periodLabel = periodName(period, date);
+
+  useEffect(() => {
+    if (!busy && consumeVoiceShortcut())
+      setEditor({ expense: null, mode: online ? "shortcut" : "voice" });
+  }, [busy, online]);
+
+  function openEditor(mode: "manual" | "voice") {
+    setNotice("");
+    setEditor({ expense: null, mode });
   }
+
   return (
     <>
       <header>
         <div className="wrap top">
           <Brand />
-          <button className="text" onClick={() => void diary.logout()}>
-            Sair
-          </button>
+          <div className="account-actions">
+            {!busy && (
+              <span className="connection">{online ? "Online" : "Offline"}</span>
+            )}
+            <button className="text" onClick={() => void diary.logout()}>
+              Sair
+            </button>
+          </div>
         </div>
       </header>
       <main className="wrap board">
-        <div className="heading">
+        <div className="page-heading">
           <h1>Meus gastos</h1>
-          <button
-            className="primary"
-            disabled={!diary.online || diary.busy}
-            onClick={() => {
-              setNotice("");
-              setEditor(null);
-            }}
+          <div
+            className="quick-actions"
+            role="group"
+            aria-label="Ações do diário"
           >
-            + Novo gasto
-          </button>
+            <a className="history-jump" href="#historico">
+              Histórico
+            </a>
+            <button
+              className="primary new-expense"
+              disabled={!online || busy}
+              onClick={() => openEditor("manual")}
+            >
+              <span aria-hidden="true">+</span> Novo gasto
+            </button>
+            <button
+              className="secondary voice-action"
+              aria-label="Registrar por voz"
+              disabled={!online || busy}
+              onClick={() => openEditor("voice")}
+            >
+              <span className="mic-icon" aria-hidden="true" />
+              <span>Voz</span>
+            </button>
+          </div>
         </div>
         {diary.notice && (
           <p role="status" className="notice">
@@ -400,96 +548,132 @@ function Book({ diary }: { diary: Diary }) {
           </p>
         )}
         <div className="layout">
-          <section aria-label="Resumo mensal" className="summary">
-            <div className="month">
+          <section className="summary" aria-label="Resumo do período">
+            <div
+              className="segments period-options"
+              role="group"
+              aria-label="Período"
+            >
+              {periodOptions.map(({ value, label }) => (
+                <button
+                  key={value}
+                  aria-pressed={period === value}
+                  onClick={() => setPeriod(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="period-navigation">
               <button
-                className="arrow"
-                aria-label="Mês anterior"
-                onClick={() => moveMonth(-1)}
+                className="period-step"
+                aria-label={currentPeriod.previous}
+                onClick={() => setDate((day) => movePeriod(period, day, -1))}
               >
                 ‹
               </button>
-              <label>
-                {monthName(month)}
-                <input
-                  type="month"
-                  value={month}
-                  aria-label="Selecionar mês"
-                  onChange={(e) => {
-                    if (e.target.value) setMonth(e.target.value);
-                  }}
-                />
-              </label>
+              {period === "month" ? (
+                <label className="current-period month-picker">
+                  <span aria-live="polite">{periodLabel}</span>
+                  <input
+                    type="month"
+                    value={date.slice(0, 7)}
+                    min="0001-01"
+                    max="9999-12"
+                    aria-label="Selecionar mês"
+                    onChange={(event) => {
+                      const month = event.currentTarget.value;
+                      if (/^(?!0000)[0-9]{4}-(?:0[1-9]|1[0-2])$/.test(month))
+                        setDate(month + "-01");
+                    }}
+                  />
+                </label>
+              ) : (
+                <span className="current-period" aria-live="polite">
+                  {periodLabel}
+                </span>
+              )}
               <button
-                className="arrow"
-                aria-label="Próximo mês"
-                onClick={() => moveMonth(1)}
+                className="period-step"
+                aria-label={currentPeriod.next}
+                onClick={() => setDate((day) => movePeriod(period, day, 1))}
               >
                 ›
               </button>
             </div>
-            <p>Total do mês</p>
+            <p>Total no período</p>
             <strong>{data ? money(total) : "—"}</strong>
-            <h2>Por categoria</h2>
-            {groups.length ? (
-              <ul>
-                {groups.map(([c, v]) => (
-                  <li key={c}>
-                    <div>
-                      <span>{c}</span>
-                      <b>{money(v)}</b>
-                    </div>
-                    <progress
-                      aria-label={"Participação de " + c}
-                      value={v}
-                      max={total}
-                    />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <small>
-                {data ? "Sem gastos neste mês." : "Aguardando histórico."}
-              </small>
-            )}
+            <span className="period-count">
+              {data ? rows.length : "—"} {rows.length === 1 ? "gasto" : "gastos"}
+            </span>
           </section>
-          <section className="history">
+          <Breakdown
+            groups={groups}
+            total={total}
+            selected={category}
+            onSelect={setCategory}
+            ready={Boolean(data)}
+          />
+          <section
+            id="historico"
+            className="history"
+            aria-labelledby="history-title"
+          >
             <div className="heading">
-              <h2>Histórico</h2>
-              <span>
-                {data ? rows.length : "—"}{" "}
-                {rows.length === 1 ? "gasto" : "gastos"}
+              <h2 id="history-title">Histórico</h2>
+              <span aria-live="polite">
+                {data ? visibleRows.length : "—"}{" "}
+                {visibleRows.length === 1 ? "gasto" : "gastos"}
               </span>
             </div>
+            {category && (
+              <div className="history-filter">
+                <span>
+                  <CategoryDot category={category} /> {category}
+                </span>
+                <button className="text" onClick={() => setCategory(null)}>
+                  Limpar filtro
+                </button>
+              </div>
+            )}
             {notice && <p role="status">{notice}</p>}
             {!data ? (
-              <p>
-                {diary.busy
+              <p className="empty">
+                {busy
                   ? "Consultando gastos…"
                   : "Nenhuma cópia do histórico disponível."}
               </p>
-            ) : rows.length === 0 ? (
-              <p className="empty">Nenhum gasto em {monthName(month)}.</p>
+            ) : visibleRows.length === 0 ? (
+              <p className="empty">
+                {category
+                  ? "Nenhum gasto nesta categoria no período."
+                  : `Nenhum gasto em ${periodLabel}.`}
+              </p>
             ) : (
-              <ul>
-                {rows.map((row) => (
+              <ul className="expense-list">
+                {visibleRows.map((row) => (
                   <li key={row.id}>
                     <div className="row">
-                      <div>
-                        <small>
-                          {dayName(row.date)} · {row.category}
-                        </small>
+                      <div className="expense-main">
                         <h3>{row.description}</h3>
+                        <small>
+                          <span className="expense-category">
+                            <CategoryDot category={row.category} />
+                            {row.category}
+                          </span>
+                          <span className="expense-date">{dayName(row.date)}</span>
+                        </small>
                       </div>
                       <strong>{money(row.amount)}</strong>
                     </div>
-                    {diary.online && (
+                    {online && (
                       <div className="actions">
                         {deleting === row.id ? (
                           <>
-                            Excluir este gasto?
+                            <span>Excluir este gasto?</span>
                             <button
-                              disabled={diary.busy}
+                              className="danger"
+                              disabled={busy}
                               onClick={() =>
                                 void withMessage(async () => {
                                   await diary.mutate(
@@ -510,13 +694,15 @@ function Book({ diary }: { diary: Diary }) {
                         ) : (
                           <>
                             <button
-                              disabled={diary.busy}
-                              onClick={() => setEditor(row)}
+                              disabled={busy}
+                              onClick={() =>
+                                setEditor({ expense: row, mode: "manual" })
+                              }
                             >
                               Editar
                             </button>
                             <button
-                              disabled={diary.busy}
+                              disabled={busy}
                               onClick={() => setDeleting(row.id)}
                             >
                               Excluir
@@ -539,7 +725,7 @@ function Book({ diary }: { diary: Diary }) {
               <button
                 className="text"
                 onClick={() => void diary.refresh()}
-                disabled={diary.busy}
+                disabled={busy}
               >
                 Atualizar
               </button>
@@ -547,11 +733,12 @@ function Book({ diary }: { diary: Diary }) {
           </section>
         </div>
       </main>
-      {editor !== undefined && (
+      {editor && (
         <Editor
           diary={diary}
-          expense={editor}
-          done={() => setEditor(undefined)}
+          expense={editor.expense}
+          mode={editor.mode}
+          done={() => setEditor(null)}
         />
       )}
     </>

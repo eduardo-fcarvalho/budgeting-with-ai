@@ -28,7 +28,8 @@ self.addEventListener('activate', event => {
 });
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-  if (event.request.method !== 'GET' || url.origin !== location.origin || url.search) return;
+  if (event.request.method !== 'GET' || url.origin !== location.origin) return;
+  if (url.search && !(event.request.mode === 'navigate' && url.pathname === '/' && url.search === '?acao=gravar')) return;
   const file = url.pathname === '/' ? '/index.html' : url.pathname;
   if (!publicFiles.has(file)) return;
   event.respondWith(caches.open(name).then(async cache => (await cache.match(file)) || fetch(event.request)));
