@@ -119,6 +119,7 @@ test("consulta offline e logout eliminam o histórico em todas as abas", async (
   const bounds = await add.boundingBox();
   expect(bounds.x + bounds.width / 2).toBeCloseTo(page.viewportSize().width / 2, 0);
   await add.click();
+  await page.getByRole("button", { name: "Preencher manualmente" }).click();
   await expect(page.getByLabel("Valor (R$)", { exact: true })).toBeFocused();
   await page.getByLabel("Descrição").fill("Almoço de teste");
   await page.getByLabel("Valor (R$)", { exact: true }).fill("42,90");
@@ -148,6 +149,16 @@ test("consulta offline e logout eliminam o histórico em todas as abas", async (
     page.getByRole("heading", { name: "Almoço de teste" }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Novo gasto" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Registrar por voz" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Editar" })).toHaveCount(0);
+  const cachedPaths = await page.evaluate(async () => {
+    const entries = await Promise.all((await caches.keys()).map(async (key) =>
+      (await (await caches.open(key)).keys()).map((request) => new URL(request.url).pathname)
+    ));
+    return entries.flat();
+  });
+  expect(cachedPaths.some((path) => path.startsWith("/api/"))).toBe(false);
+  await page.getByRole("button", { name: "Ajustes" }).click();
   await page.getByRole("button", { name: "Sair" }).click();
   await expect(page.getByLabel("E-mail")).toBeVisible();
   await expect(second.getByLabel("E-mail")).toBeVisible();
@@ -182,7 +193,10 @@ test("voz abre rascunho editável e descartar mantém o histórico intacto", asy
   await context.grantPermissions(["microphone"], { origin: url });
   await page.goto(url);
   await login(page, "voz@example.test");
+  let requests = 0;
+  page.on("request", (request) => { if (request.url() === url + "/api/drafts") requests++; });
   await page.getByRole("button", { name: "Novo gasto" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Registrar por voz" }).click();
   await page.getByRole("button", { name: "Gravar gasto" }).click();
   const stop = page.getByRole("button", { name: "Parar e interpretar" });
   await expect(stop).toBeEnabled();
@@ -196,7 +210,10 @@ test("voz abre rascunho editável e descartar mantém o histórico intacto", asy
   await expect(page.getByLabel("Categoria", { exact: true })).toHaveValue(
     "Café",
   );
-  await page.getByRole("button", { name: "Fechar", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Revisar rascunho" })).toBeFocused();
+  await page.getByLabel("Descrição").fill("Descrição revisada");
+  await page.getByRole("button", { name: "Descartar rascunho" }).click();
+  expect(requests).toBe(1);
   expect(profiles.get(account).size).toBe(0);
   await expect(
     page.getByText("Nenhum gasto em", { exact: false }),
@@ -232,10 +249,7 @@ test("atalho do manifesto abre a voz e preserva a alternativa de um toque", asyn
   await expect(start).toBeDisabled();
 });
 
-test("atalho da PWA em primeiro plano usa o microfone já autorizado", async ({
-  page,
-  context,
-}) => {
+test("atalho instalado abre a voz sem capturar até o toque explícito", async ({ page, context }) => {
   account = null;
   let audioRequests = 0;
   page.on("request", (request) => {
@@ -246,30 +260,24 @@ test("atalho da PWA em primeiro plano usa o microfone já autorizado", async ({
     const original = window.matchMedia.bind(window);
     window.matchMedia = (query) =>
       query === "(display-mode: standalone)" ? { matches: true } : original(query);
+    const capture = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    window.captureStarts = 0;
+    navigator.mediaDevices.getUserMedia = (...args) => {
+      window.captureStarts++;
+      return capture(...args);
+    };
   });
-  await page.goto(url);
+  await page.goto(url + "/?acao=gravar");
   await login(page, "instalado@example.test");
-  await expect(page.getByRole("button", { name: "Novo gasto" })).toBeEnabled();
-  const stop = page.getByRole("button", { name: "Parar e interpretar" });
   const start = page.getByRole("button", { name: "Gravar gasto", exact: true });
-  await page.goto(url + "/?acao=gravar");
+  const stop = page.getByRole("button", { name: "Parar e interpretar" });
+  await expect(start).toBeFocused();
+  expect(await page.evaluate(() => window.captureStarts)).toBe(0);
+  await start.click();
   await expect(stop).toBeEnabled();
+  expect(await page.evaluate(() => window.captureStarts)).toBe(1);
   await page.getByRole("button", { name: "Cancelar gravação" }).click();
-  await expect(start).toBeEnabled();
-
-  await page.clock.install();
-  await page.goto(url + "/?acao=gravar");
-  await expect(stop).toBeEnabled();
-  await page.clock.fastForward(30_001);
-  await expect(start).toBeEnabled();
-
-  await page.goto(url + "/?acao=gravar");
-  await expect(stop).toBeEnabled();
-  await page.evaluate(() => {
-    Object.defineProperty(document, "hidden", { value: true });
-    document.dispatchEvent(new Event("visibilitychange"));
-  });
-  await expect(start).toBeEnabled();
+  await expect(start).toBeFocused();
   expect(audioRequests).toBe(0);
   expect(profiles.get(account).size).toBe(0);
 });
@@ -358,11 +366,12 @@ test("tema segue o sistema e lembra a escolha no diário e no login", async ({
   await toggle.click();
   await login(page, "tema@example.test");
   await expect(page.getByRole("heading", { name: "Meus gastos" })).toBeVisible();
+  await page.getByRole("button", { name: "Ajustes" }).click();
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
   await expect(root).toHaveCSS("color-scheme", "dark");
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Meus gastos" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ajustes" })).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Sair", exact: true }).click();
   await expect(page.getByLabel("E-mail")).toBeVisible();
@@ -405,4 +414,81 @@ test("recarregar recebe a nova versão mesmo com outra aba aberta", async ({
   } finally {
     shellRevision = "";
   }
+});
+
+test("navegação responsiva, foco do editor e movimento reduzido", async ({ page }) => {
+  account = null;
+  const email = "navegacao@example.test";
+  const date = "2026-03-15";
+  const names = ["Mercado", "Transporte", "Casa", "Lazer", "Café", "Oficina"];
+  profiles.set(email, new Map(names.map((category, index) => {
+    const id = String(index);
+    return [id, { id, category, date, amount: 1500 + index, description: `Gasto de ${category}` }];
+  })));
+  await page.clock.setFixedTime(new Date(2026, 2, 15, 12));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(url);
+  await login(page, email);
+  const nav = page.getByRole("navigation", { name: "Navegação principal" });
+  const add = nav.getByRole("button", { name: "Novo gasto" });
+  await expect(add).toBeEnabled();
+  await expect(page.locator(".category-donut")).toHaveCount(0);
+  await expect(page.locator(".bar-value")).toHaveCount(6);
+  for (const width of [320, 375, 390, 430, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 852 });
+    const bounds = await add.boundingBox();
+    expect(bounds.width).toBeGreaterThanOrEqual(44);
+    expect(bounds.height).toBeGreaterThanOrEqual(44);
+    if (width < 1024) expect(bounds.x + bounds.width / 2).toBeCloseTo(width / 2, 0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+  }
+  await page.setViewportSize({ width: 390, height: 852 });
+  await nav.getByRole("button", { name: "Análises" }).click();
+  await expect(nav.getByRole("button", { name: "Análises" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("main")).toBeFocused();
+  await expect(page).toHaveURL(/#analises$/);
+  const duration = await page.locator(".screen-content").evaluate((element) =>
+    parseFloat(getComputedStyle(element).animationDuration)
+  );
+  expect(duration).toBeLessThan(0.001);
+  await page.getByRole("button", { name: "Ver histórico" }).click();
+  await page.getByRole("searchbox", { name: "Buscar no histórico" }).fill("Mercado");
+  await expect(page.getByRole("heading", { name: "Gasto de Mercado" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Gasto de Casa" })).toHaveCount(0);
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Análises" })).toBeVisible();
+
+  await add.click();
+  await page.getByRole("button", { name: "Preencher manualmente" }).click();
+  const dialog = page.getByRole("dialog", { name: "Novo gasto" });
+  const price = dialog.getByLabel("Valor (R$)", { exact: true });
+  await expect(price).toBeFocused();
+  await page.setViewportSize({ width: 390, height: 430 });
+  expect(await dialog.evaluate((element) => element.getBoundingClientRect().bottom)).toBeLessThanOrEqual(430);
+  await dialog.getByRole("button", { name: "Confirmar gasto" }).click();
+  await expect(price).toHaveAttribute("aria-invalid", "true");
+  await expect(dialog.getByRole("alert")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(add).toBeFocused();
+});
+
+test("exclusão mantém confirmação e não remove se cancelada", async ({ page }) => {
+  account = null;
+  const email = "exclusao@example.test";
+  const expense = { id: "excluir", category: "Casa", date: "2026-03-15", amount: 1500, description: "Gasto a excluir" };
+  profiles.set(email, new Map([[expense.id, expense]]));
+  await page.clock.setFixedTime(new Date(2026, 2, 15, 12));
+  await page.goto(url);
+  await login(page, email);
+  const remove = page.getByRole("button", { name: "Excluir", exact: true });
+  await remove.click();
+  await expect(page.getByText("Excluir este gasto?")).toBeVisible();
+  await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await expect(remove).toBeFocused();
+  expect(profiles.get(email).size).toBe(1);
+  await remove.click();
+  await page.getByRole("button", { name: "Sim, excluir" }).click();
+  await expect(page.getByText("Gasto excluído.")).toBeVisible();
+  expect(profiles.get(email).size).toBe(0);
 });
