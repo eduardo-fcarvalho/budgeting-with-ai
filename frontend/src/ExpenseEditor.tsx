@@ -26,25 +26,36 @@ export function ExpenseEditor({
 }) {
   const [id] = useState(() => expense?.id || crypto.randomUUID());
   const [view, setView] = useState<Mode>(mode);
+  const [initialDate] = useState(() => expense?.date || localDate());
   const [description, setDescription] = useState(expense?.description || "");
   const [price, setPrice] = useState(inputPrice(expense?.amount));
-  const [date, setDate] = useState(expense?.date || localDate());
+  const [date, setDate] = useState(initialDate);
   const [category, setCategory] = useState(expense?.category || "");
   const [draftReady, setDraftReady] = useState(false);
+  const [draftToReview, setDraftToReview] = useState<Draft | null>(null);
+  const [confirmClose, setConfirmClose] = useState(false);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const modal = useRef<HTMLDialogElement>(null);
+  const confirmation = useRef<HTMLDialogElement>(null);
+  const keepEditing = useRef<HTMLButtonElement>(null);
   const summary = useRef<HTMLDivElement>(null);
   const amount = cents(price);
   const cleanCategory = category.trim();
+  const changed =
+    description.trim() !== (expense?.description || "") ||
+    price.trim() !== inputPrice(expense?.amount) ||
+    date !== initialDate ||
+    cleanCategory !== (expense?.category || "");
+  const decision = confirmClose ? "close" : draftToReview ? "replace" : null;
   const categories = diary.data?.categories ?? [];
   const categoryName = cleanCategory.toLocaleLowerCase("pt-BR");
   const newCategory = cleanCategory && !categories.some(
     (name) => name.toLocaleLowerCase("pt-BR") === categoryName,
   );
   const fields = {
-    price: amount ? "" : "Informe um valor positivo, com até duas casas decimais.",
+    price: amount ? "" : "Informe um valor positivo com até duas casas decimais, como 1.234,56.",
     date: date ? "" : "Selecione a data do gasto.",
     description: description.trim() ? "" : "Informe uma descrição.",
     category: cleanCategory ? "" : "Informe uma categoria.",
@@ -59,6 +70,7 @@ export function ExpenseEditor({
 
   useLayoutEffect(() => {
     const dialog = modal.current!;
+    const confirmationDialog = confirmation.current!;
     const trigger = document.activeElement;
     dialog.showModal();
     const viewport = window.visualViewport;
@@ -80,10 +92,21 @@ export function ExpenseEditor({
     return () => {
       viewport?.removeEventListener("resize", fitViewport);
       viewport?.removeEventListener("scroll", fitViewport);
+      confirmationDialog.close();
       dialog.close();
       if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus();
     };
   }, []);
+
+  useLayoutEffect(() => {
+    const dialog = confirmation.current!;
+    if (decision) {
+      if (!dialog.open) dialog.showModal();
+      keepEditing.current?.focus();
+    } else if (dialog.open) {
+      dialog.close();
+    }
+  }, [decision]);
 
   useLayoutEffect(() => {
     const dialog = modal.current!;
@@ -103,12 +126,33 @@ export function ExpenseEditor({
   }
 
   function applyDraft(draft: Draft) {
+    setDraftToReview(null);
     setDescription(draft.description || "");
     setPrice(inputPrice(draft.amount));
     setDate(draft.date || localDate());
     setCategory(draft.category || "");
     setDraftReady(true);
     show("manual");
+  }
+
+  function reviewDraft(draft: Draft) {
+    if (changed) setDraftToReview(draft);
+    else applyDraft(draft);
+  }
+
+  function requestClose() {
+    if (saving) return;
+    if (changed || draftReady) setConfirmClose(true);
+    else done();
+  }
+
+  function dismissConfirmation() {
+    if (confirmClose) {
+      setConfirmClose(false);
+    } else {
+      setDraftToReview(null);
+      show("manual");
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -147,7 +191,7 @@ export function ExpenseEditor({
       aria-labelledby="editor-title"
       onCancel={(event) => {
         event.preventDefault();
-        if (!saving) done();
+        requestClose();
       }}
     >
       <div className="editor-heading">
@@ -169,7 +213,7 @@ export function ExpenseEditor({
           type="button"
           className="text editor-close"
           aria-label="Fechar"
-          onClick={() => done()}
+          onClick={requestClose}
           disabled={saving}
         >
           <Icon name="close" />
@@ -177,7 +221,7 @@ export function ExpenseEditor({
       </div>
 
       {view === "voice" ? (
-        <VoiceRecorder diary={diary} onDraft={applyDraft} onManual={() => show("manual")} />
+        <VoiceRecorder diary={diary} onDraft={reviewDraft} onManual={() => show("manual")} />
       ) : (
         <form className="editor-form" onSubmit={submit} noValidate aria-busy={saving}>
           {draftReady && (
@@ -313,6 +357,47 @@ export function ExpenseEditor({
           </div>
         </form>
       )}
+      <dialog
+        className="editor-confirmation"
+        ref={confirmation}
+        aria-labelledby="editor-confirmation-title"
+        aria-describedby="editor-confirmation-description"
+        onCancel={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          dismissConfirmation();
+        }}
+      >
+        <h2 id="editor-confirmation-title">
+          {confirmClose
+            ? draftReady ? "Descartar rascunho?" : "Descartar preenchimento?"
+            : "Usar o rascunho da gravação?"}
+        </h2>
+        <p id="editor-confirmation-description">
+          {confirmClose
+            ? "O que está neste formulário será descartado."
+            : "O rascunho substituirá os campos que você já preencheu."}
+        </p>
+        <div className="editor-actions">
+          <button
+            type="button"
+            className="primary"
+            ref={keepEditing}
+            onClick={dismissConfirmation}
+          >
+            {confirmClose ? "Continuar editando" : "Manter meu preenchimento"}
+          </button>
+          {confirmClose ? (
+            <button type="button" className="text editor-discard" onClick={() => done()}>
+              Descartar e fechar
+            </button>
+          ) : draftToReview && (
+            <button type="button" className="secondary" onClick={() => applyDraft(draftToReview)}>
+              Usar rascunho
+            </button>
+          )}
+        </div>
+      </dialog>
     </dialog>
   );
 }

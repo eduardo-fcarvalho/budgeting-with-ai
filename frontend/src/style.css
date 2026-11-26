@@ -177,7 +177,6 @@ button:disabled, button[aria-disabled="true"] { cursor: default; opacity: 0.6; }
   font-size: 0.875rem;
 }
 .period-panel { max-width: 35rem; margin-bottom: var(--space-4); }
-.analysis-history { margin-top: var(--space-4); }
 
 .settings-card {
   width: min(100%, 42rem);

@@ -451,10 +451,20 @@ test("navegação responsiva, foco do editor e movimento reduzido", async ({ pag
     parseFloat(getComputedStyle(element).animationDuration)
   );
   expect(duration).toBeLessThan(0.001);
-  await page.getByRole("button", { name: "Ver histórico" }).click();
-  await page.getByRole("searchbox", { name: "Buscar no histórico" }).fill("Mercado");
+  const marketCategory = page.getByRole("button", { name: /Ver gastos de Mercado no histórico/ });
+  await marketCategory.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/#historico$/);
+  await expect(page.getByRole("main")).toBeFocused();
+  await expect(page.getByRole("button", { name: "Limpar filtro" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Gasto de Mercado" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Gasto de Casa" })).toHaveCount(0);
+  await nav.getByRole("button", { name: "Início" }).click();
+  await expect(page.getByRole("heading", { name: "Gasto de Casa" })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("button", { name: "Limpar filtro" })).toBeVisible();
+  await page.getByRole("button", { name: "Mês anterior" }).click();
+  await expect(page.getByRole("button", { name: "Limpar filtro" })).toHaveCount(0);
   await page.goBack();
   await expect(page.getByRole("heading", { name: "Análises" })).toBeVisible();
 
@@ -521,4 +531,135 @@ test("limite de voz gera um rascunho que só é salvo ao confirmar", async ({ pa
     { description: "Gasto de voz revisado", amount: 4290, category: "Café" },
   ]);
   expect(requests).toBe(1);
+});
+
+test("protege o preenchimento ao fechar e aceita moeda copiada", async ({ page }) => {
+  account = null;
+  const email = "preenchimento@example.test";
+  await page.goto(url);
+  await login(page, email);
+  const add = page.getByRole("button", { name: "Novo gasto" });
+  await add.click();
+  await page.getByRole("button", { name: "Preencher manualmente" }).click();
+  const editor = page.getByRole("dialog", { name: "Novo gasto" });
+  const description = editor.getByLabel("Descrição");
+  const price = editor.getByLabel("Valor (R$)", { exact: true });
+  await description.fill("Gasto fictício");
+  await price.fill("R$\u00a01.234,56");
+  await editor.getByLabel("Categoria", { exact: true }).fill("Casa");
+
+  await page.keyboard.press("Escape");
+  const confirm = page.getByRole("dialog", { name: "Descartar preenchimento?" });
+  const keepEditing = confirm.getByRole("button", { name: "Continuar editando" });
+  await expect(keepEditing).toBeFocused();
+  await keepEditing.click();
+  await expect(price).toHaveValue("R$\u00a01.234,56");
+  await expect(description).toHaveValue("Gasto fictício");
+  await expect(editor.getByLabel("Categoria", { exact: true })).toHaveValue("Casa");
+
+  await editor.getByRole("button", { name: "Fechar", exact: true }).click();
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "Descartar e fechar" }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(add).toBeFocused();
+  expect(profiles.get(email).size).toBe(0);
+
+  await add.click();
+  await page.getByRole("button", { name: "Preencher manualmente" }).click();
+  await expect(price).toHaveValue("");
+  await price.fill("R$\u00a01.234,56");
+  await description.fill("Gasto fictício");
+  await editor.getByLabel("Categoria", { exact: true }).fill("Casa");
+  await editor.getByRole("button", { name: "Confirmar gasto" }).click();
+  await expect(page.getByRole("heading", { name: "Gasto fictício" })).toBeVisible();
+  expect([...profiles.get(email).values()][0].amount).toBe(123456);
+});
+
+test("o rascunho de voz só substitui o preenchimento se escolhido", async ({ page, context }) => {
+  account = null;
+  const email = "substituicao@example.test";
+  await context.grantPermissions(["microphone"], { origin: url });
+  await page.goto(url);
+  await login(page, email);
+  let drafts = 0;
+  page.on("request", (request) => {
+    if (request.url() === url + "/api/drafts") drafts++;
+  });
+  await page.getByRole("button", { name: "Novo gasto" }).click();
+  await page.getByRole("button", { name: "Preencher manualmente" }).click();
+  const price = page.getByLabel("Valor (R$)", { exact: true });
+  await price.fill("21,90");
+  await page.getByLabel("Descrição").fill("Preenchimento inicial");
+
+  const recordDraft = async () => {
+    await page.getByRole("dialog", { name: "Novo gasto" })
+      .getByRole("button", { name: "Registrar por voz" }).click();
+    await page.getByRole("button", { name: "Gravar gasto" }).click();
+    const stop = page.getByRole("button", { name: "Parar e interpretar" });
+    await expect(stop).toBeEnabled();
+    // Allow the fake recording device to supply audio frames before stopping.
+    await page.waitForTimeout(450);
+    await stop.click();
+  };
+  const decision = page.getByRole("dialog", { name: "Usar o rascunho da gravação?" });
+
+  await recordDraft();
+  const keep = decision.getByRole("button", { name: "Manter meu preenchimento" });
+  await expect(keep).toBeFocused();
+  await keep.click();
+  await expect(price).toHaveValue("21,90");
+  await expect(page.getByLabel("Descrição")).toHaveValue("Preenchimento inicial");
+
+  await recordDraft();
+  await decision.getByRole("button", { name: "Usar rascunho" }).click();
+  await expect(page.getByRole("heading", { name: "Revisar rascunho" })).toBeFocused();
+  await expect(price).toHaveValue("42,90");
+  expect(drafts).toBe(2);
+  expect(profiles.get(email).size).toBe(0);
+});
+
+test("compara o mês corrente por dias equivalentes e ignora meses futuros", async ({ page }) => {
+  account = null;
+  const email = "comparacao@example.test";
+  const fixtures = [
+    ["2026-02-01", 1000],
+    ["2026-02-28", 2000],
+    ["2026-03-28", 5000],
+    ["2026-03-29", 7000],
+    ["2026-04-01", 500],
+  ];
+  profiles.set(email, new Map(fixtures.map(([date, amount]) => [
+    date, { id: date, date, description: "Gasto de teste", amount, category: "Casa" },
+  ])));
+  await page.clock.setFixedTime(new Date(2026, 2, 30, 12));
+  await page.goto(url);
+  await login(page, email);
+  const comparison = page.locator(".previous-total");
+  await expect(page.locator(".summary > strong")).toContainText("120,00");
+  await expect(comparison).toContainText("Até o dia 28");
+  await expect(comparison).toContainText("20,00");
+  await page.getByRole("button", { name: "Próximo mês" }).click();
+  await expect(page.locator(".summary > strong")).toContainText("5,00");
+  await expect(comparison).toHaveCount(0);
+});
+
+test("busca no histórico ignora acentos e mantém o texto original", async ({ page }) => {
+  account = null;
+  const email = "busca@example.test";
+  profiles.set(email, new Map([
+    ["1", { id: "1", date: "2026-03-15", description: "Passagem de ônibus", amount: 600, category: "Transporte" }],
+    ["2", { id: "2", date: "2026-03-15", description: "Encomenda", amount: 2000, category: "Decoração" }],
+  ]));
+  await page.clock.setFixedTime(new Date(2026, 2, 15, 12));
+  await page.goto(url + "/#historico");
+  await login(page, email);
+  const search = page.getByRole("searchbox", { name: "Buscar no histórico" });
+  for (const query of ["onibus", "ônibus", " ONIBUS "]) {
+    await search.fill(query);
+    await expect(page.getByRole("heading", { name: "Passagem de ônibus" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Encomenda" })).toHaveCount(0);
+  }
+  await search.fill("decoracao");
+  await expect(page.getByRole("heading", { name: "Encomenda" })).toBeVisible();
+  await expect(page.getByText("Decoração", { exact: true })).toBeVisible();
 });

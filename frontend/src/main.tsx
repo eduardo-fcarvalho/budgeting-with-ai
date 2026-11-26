@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "re
 import { message } from "./api";
 import { AppShell, Brand, type Screen } from "./AppShell";
 import { Breakdown } from "./Breakdown";
-import { localDate, movePeriod, periodRows, totals, type Expense, type Period } from "./domain";
+import { localDate, periodRows, totals, type Expense, type Period } from "./domain";
 import { ExpenseEditor } from "./ExpenseEditor";
 import { ExpenseHistory } from "./ExpenseHistory";
 import { Icon } from "./Icon";
@@ -145,7 +145,8 @@ function Book({ diary }: { diary: Diary }) {
   const [screen, setScreen] = useState(currentScreen);
   const [period, setPeriod] = useState<Period>("month");
   const [date, setDate] = useState(localDate);
-  const [category, setCategory] = useState<string | null>(null);
+  const [homeCategory, setHomeCategory] = useState<string | null>(null);
+  const [historyCategory, setHistoryCategory] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
   const [editor, setEditor] = useState<OpenEditor | null>(null);
   const [notice, setNotice] = useState("");
@@ -199,36 +200,51 @@ function Book({ diary }: { diary: Diary }) {
     setEditor({ expense, mode });
   }
 
-  const rows = periodRows(data?.expenses || [], period, date);
+  function changePeriod(nextPeriod: Period, nextDate: string) {
+    if (period === nextPeriod && date === nextDate) return;
+    setPeriod(nextPeriod);
+    setDate(nextDate);
+    setHomeCategory(null);
+    setHistoryCategory(null);
+  }
+
+  function openHistory(category: string | null) {
+    setHistoryCategory(category);
+    navigate("history");
+  }
+
+  const expenses = data?.expenses || [];
+  const rows = periodRows(expenses, period, date);
   const groups = totals(rows);
   const total = groups.reduce((sum, [, value]) => sum + value, 0);
   const ready = Boolean(data);
-  const previousDate = period === "month" ? movePeriod("month", date, -1) : date;
-  const previousRows = data && previousDate !== date
-    ? periodRows(data.expenses, "month", previousDate)
-    : [];
-  const previousTotal = previousRows.length
-    ? previousRows.reduce((sum, row) => sum + row.amount, 0)
-    : null;
-  const controls = { period, date, onPeriod: setPeriod, onDate: setDate };
-  const distribution = (
-    <Breakdown groups={groups} total={total} selected={category} onSelect={setCategory} ready={ready} />
+  const controls = {
+    period,
+    date,
+    onPeriod: (next: Period) => changePeriod(next, date),
+    onDate: (next: string) => changePeriod(period, next),
+  };
+  const overview = (
+    <Overview {...controls} expenses={expenses} rows={rows} total={total} ready={ready} busy={busy} />
   );
-  const expenseHistory = (recent = false) => (
-    <ExpenseHistory
-      rows={category ? rows.filter((row) => row.category === category) : rows}
-      ready={ready}
-      busy={busy}
-      online={online}
-      category={category}
-      onClear={() => setCategory(null)}
-      onEdit={(expense) => openEditor("manual", expense)}
-      onDelete={async (id) => { await diary.mutate("expenses/" + id, "DELETE"); }}
-      periodLabel={periodName(period, date)}
-      recent={recent}
-      onHistory={() => navigate("history")}
-    />
-  );
+  function expenseHistory(recent = false) {
+    const category = recent ? homeCategory : historyCategory;
+    return (
+      <ExpenseHistory
+        rows={category ? rows.filter((row) => row.category === category) : rows}
+        ready={ready}
+        busy={busy}
+        online={online}
+        category={category}
+        onClear={() => (recent ? setHomeCategory : setHistoryCategory)(null)}
+        onEdit={(expense) => openEditor("manual", expense)}
+        onDelete={async (id) => { await diary.mutate("expenses/" + id, "DELETE"); }}
+        periodLabel={periodName(period, date)}
+        recent={recent}
+        onHistory={() => openHistory(homeCategory)}
+      />
+    );
+  }
 
   return (
     <>
@@ -251,7 +267,7 @@ function Book({ diary }: { diary: Diary }) {
           {screen === "home" && (
             <>
               <div className="dashboard-grid home-dashboard">
-                <Overview {...controls} rows={rows} total={total} ready={ready} busy={busy} previousTotal={previousTotal} />
+                {overview}
                 <section className="voice-card" aria-labelledby="voice-card-title">
                   <div className="voice-card-copy">
                     <h2 id="voice-card-title">Registre por voz</h2>
@@ -264,7 +280,13 @@ function Book({ diary }: { diary: Diary }) {
                     <Icon name="mic" size={37} />
                   </div>
                 </section>
-                {distribution}
+                <Breakdown
+                  groups={groups}
+                  total={total}
+                  selected={homeCategory}
+                  onSelect={(category) => setHomeCategory(homeCategory === category ? null : category)}
+                  ready={ready}
+                />
                 {expenseHistory(true)}
               </div>
               <SyncStatus diary={diary} />
@@ -278,15 +300,10 @@ function Book({ diary }: { diary: Diary }) {
             </>
           )}
           {screen === "analytics" && (
-            <>
-              <div className="dashboard-grid">
-                <Overview {...controls} rows={rows} total={total} ready={ready} busy={busy} previousTotal={previousTotal} />
-                {distribution}
-              </div>
-              <button className="secondary analysis-history" type="button" onClick={() => navigate("history")}>
-                {category ? "Ver gastos da categoria" : "Ver histórico"} <Icon name="arrowRight" />
-              </button>
-            </>
+            <div className="dashboard-grid">
+              {overview}
+              <Breakdown groups={groups} total={total} onSelect={openHistory} ready={ready} />
+            </div>
           )}
           {screen === "settings" && (
             <div className="settings-card">

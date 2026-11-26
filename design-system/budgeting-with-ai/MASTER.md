@@ -60,16 +60,20 @@ movimento reduzido mantém as mesmas ações e os mesmos anúncios.
 - **Início.** Painel verde-floresta com total, contagem e período. O cartão
   claro de voz leva ao gravador. Categoria e gastos recentes completam a
   composição em uma coluna no celular e duas quando há espaço. A comparação
-  mensal aparece quando há gastos no mês anterior. O rodapé indica a última
-  sincronização e oferece atualização.
+  mensal aparece quando há gastos no mês anterior e o período não é futuro.
+  No mês em curso, compara o mesmo número de dias nos dois meses. O rodapé
+  indica a última sincronização e oferece atualização.
 - **Análises.** As cores são determinadas pelo nome de cada categoria pessoal.
   Os valores em BRL e as participações permanecem disponíveis em texto. A
-  seleção da categoria filtra o histórico.
+  seleção da categoria abre o Histórico filtrado. No Início, a seleção
+  filtra apenas os gastos recentes até a pessoa abrir o Histórico.
 - **Histórico.** Gastos agrupados por data, busca local por descrição ou
   categoria, ícones junto às categorias e confirmação explícita de exclusão.
 - **Novo gasto.** A escolha central abre o registro manual ou por voz.
   Diálogos nativos usam formato de folha no celular. O editor deixa o valor,
   a data, a descrição e a categoria visíveis, com erros ligados aos campos.
+  Fechar um editor alterado pede confirmação. A pessoa escolhe se um
+  rascunho de voz substitui os campos já preenchidos.
 - **Voz.** O microfone começa após toque explícito, inclusive pelo atalho
   instalado. O cronômetro mostra 30 segundos, e a pulsação funciona como
   decoração. O rascunho editável recebe foco para revisão. Confirmar e

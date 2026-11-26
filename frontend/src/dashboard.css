@@ -360,6 +360,7 @@
   display: grid;
   justify-items: end;
   min-inline-size: 0;
+  margin-inline-start: auto;
   color: var(--muted);
   font-size: 0.75rem;
   line-height: 1.3;
@@ -369,6 +370,7 @@
 }
 
 .legend-amount b { color: var(--ink); font-size: 0.8125rem; }
+.legend-next { flex: none; color: var(--muted); }
 
 .bar-track,
 .bar-value {

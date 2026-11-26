@@ -35,11 +35,12 @@ export function Breakdown({
 }: {
   groups: [string, number][];
   total: number;
-  selected: string | null;
-  onSelect: (category: string | null) => void;
+  selected?: string | null;
+  onSelect: (category: string) => void;
   ready: boolean;
 }) {
   const title = useId();
+  const opensHistory = selected === undefined;
   const showDonut = total > 0 && groups.length <= 5;
   let cumulative = 0;
   const segments = showDonut
@@ -71,13 +72,16 @@ export function Breakdown({
           <ul className="legend" aria-label="Participação por categoria">
             {groups.map(([category, value]) => {
               const share = value / total;
+              const amount = money(value);
+              const shareLabel = share < 0.001 ? "< 0,1%" : percent.format(share);
               return (
                 <li key={category}>
                   <button
                     type="button"
                     className="legend-item"
-                    aria-pressed={selected === category}
-                    onClick={() => onSelect(selected === category ? null : category)}
+                    aria-label={opensHistory ? `Ver gastos de ${category} no histórico, ${amount}, ${shareLabel}` : undefined}
+                    aria-pressed={opensHistory ? undefined : selected === category}
+                    onClick={() => onSelect(category)}
                     style={{ "--category-color": categoryColor(category) } as CSSProperties}
                   >
                     <span className="legend-details">
@@ -86,9 +90,10 @@ export function Breakdown({
                         <span>{category}</span>
                       </span>
                       <span className="legend-amount">
-                        <b>{money(value)}</b>
-                        <span>{share < 0.001 ? "< 0,1%" : percent.format(share)}</span>
+                        <b>{amount}</b>
+                        <span>{shareLabel}</span>
                       </span>
+                      {opensHistory && <Icon name="chevronRight" size={14} className="legend-next" />}
                     </span>
                     {!showDonut && (
                       <span className="bar-track" aria-hidden="true">

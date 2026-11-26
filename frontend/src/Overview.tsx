@@ -1,5 +1,5 @@
 import { Icon } from "./Icon";
-import { money, movePeriod, periodBounds, type Expense, type Period } from "./domain";
+import { localDate, money, movePeriod, periodBounds, periodRows, type Expense, type Period } from "./domain";
 import "./dashboard.css";
 
 const periodOptions = [
@@ -88,22 +88,53 @@ export function PeriodControls({ period, date, onPeriod, onDate }: PeriodProps) 
   );
 }
 
+function monthComparison(expenses: Expense[], rows: Expense[], date: string, total: number) {
+  const today = localDate();
+  const month = date.slice(0, 7);
+  const currentMonth = today.slice(0, 7);
+  if (month > currentMonth) return null;
+
+  const previousDate = movePeriod("month", date, -1);
+  if (previousDate === date) return null;
+  const previousRows = periodRows(expenses, "month", previousDate);
+  if (!previousRows.length) return null;
+
+  const cutoff = month === currentMonth
+    ? Math.min(Number(today.slice(8)), periodBounds("month", previousDate).end.getDate())
+    : null;
+  const sumThrough = (entries: Expense[]) => entries.reduce(
+    (sum, row) => cutoff === null || Number(row.date.slice(8)) <= cutoff ? sum + row.amount : sum,
+    0,
+  );
+  const change = (cutoff === null ? total : sumThrough(rows)) - sumThrough(previousRows);
+
+  if (cutoff === null) return change === 0
+    ? "Mesmo total do mês anterior"
+    : `${money(Math.abs(change))} a ${change > 0 ? "mais" : "menos"} que no mês anterior`;
+
+  return change === 0
+    ? `Até o dia ${cutoff}, o total é igual ao do mesmo intervalo do mês anterior`
+    : `Até o dia ${cutoff}, ${money(Math.abs(change))} a ${change > 0 ? "mais" : "menos"} que no mesmo intervalo do mês anterior`;
+}
+
 export function Overview({
+  expenses,
   rows,
   total,
   ready,
   busy,
-  previousTotal,
   ...controls
 }: PeriodProps & {
+  expenses: Expense[];
   rows: Expense[];
   total: number;
   ready: boolean;
   busy: boolean;
-  previousTotal: number | null;
 }) {
   const loading = busy && !ready;
-  const change = previousTotal === null ? null : total - previousTotal;
+  const comparison = ready && controls.period === "month"
+    ? monthComparison(expenses, rows, controls.date, total)
+    : null;
   return (
     <section className="summary" aria-label="Resumo do período">
       <PeriodControls {...controls} />
@@ -118,13 +149,7 @@ export function Overview({
             ? `${rows.length} ${rows.length === 1 ? "gasto registrado" : "gastos registrados"}`
             : loading ? "Consultando gastos…" : "Histórico indisponível"}
         </span>
-        {ready && controls.period === "month" && change !== null && (
-          <span className="previous-total">
-            {change === 0
-              ? "Mesmo total do mês anterior"
-              : `${money(Math.abs(change))} a ${change > 0 ? "mais" : "menos"} que no mês anterior`}
-          </span>
-        )}
+        {comparison && <span className="previous-total">{comparison}</span>}
       </div>
     </section>
   );

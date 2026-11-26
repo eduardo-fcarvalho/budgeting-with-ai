@@ -10,6 +10,10 @@ const dateFormat = new Intl.DateTimeFormat("pt-BR", {
   month: "long",
 });
 
+function normalizeSearch(text: string) {
+  return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase("pt-BR");
+}
+
 export function ExpenseHistory({
   rows,
   ready,
@@ -42,9 +46,9 @@ export function ExpenseHistory({
   const [deleteError, setDeleteError] = useState("");
   const [deleted, setDeleted] = useState(false);
   const [search, setSearch] = useState("");
-  const query = search.trim().toLocaleLowerCase("pt-BR");
+  const query = normalizeSearch(search.trim());
   const matchingRows = query ? rows.filter((row) =>
-    [row.description, row.category].some((text) => text.toLocaleLowerCase("pt-BR").includes(query))
+    [row.description, row.category].some((text) => normalizeSearch(text).includes(query))
   ) : rows;
   const visibleRows = recent ? matchingRows.slice(0, 4) : matchingRows;
   const groups = new Map<string, Expense[]>();
@@ -109,10 +113,10 @@ export function ExpenseHistory({
           <p>
             {!ready
               ? busy ? "Consultando gastos…" : "Nenhuma cópia do histórico disponível."
-              : category
-                ? "Nenhum gasto nesta categoria no período."
-                : query
-                  ? "Nenhum gasto corresponde à busca."
+              : query
+                ? "Nenhum gasto corresponde à busca."
+                : category
+                  ? "Nenhum gasto nesta categoria no período."
                   : `Nenhum gasto em ${periodLabel ?? "seu histórico neste período"}.`}
           </p>
         </div>
