@@ -492,3 +492,33 @@ test("exclusão mantém confirmação e não remove se cancelada", async ({ page
   await expect(page.getByText("Gasto excluído.")).toBeVisible();
   expect(profiles.get(email).size).toBe(0);
 });
+
+test("limite de voz gera um rascunho que só é salvo ao confirmar", async ({ page, context }) => {
+  account = null;
+  const email = "voz-limite@example.test";
+  await context.grantPermissions(["microphone"], { origin: url });
+  await page.clock.install({ time: new Date(2026, 2, 15, 12) });
+  await page.goto(url);
+  await login(page, email);
+  let requests = 0;
+  page.on("request", (request) => {
+    if (request.url() === url + "/api/drafts") requests++;
+  });
+  await page.getByRole("button", { name: "Registrar por voz" }).click();
+  await page.getByRole("button", { name: "Gravar gasto" }).click();
+  const stop = page.getByRole("button", { name: "Parar e interpretar" });
+  await expect(stop).toBeEnabled();
+  // Let the fake microphone deliver audio before moving the browser clock.
+  await page.waitForTimeout(450);
+  await page.clock.fastForward(30_001);
+  await expect(page.getByRole("heading", { name: "Revisar rascunho" })).toBeFocused();
+  expect(requests).toBe(1);
+  expect(profiles.get(email).size).toBe(0);
+  await page.getByLabel("Descrição").fill("Gasto de voz revisado");
+  await page.getByRole("button", { name: "Confirmar gasto" }).click();
+  await expect(page.getByRole("heading", { name: "Gasto de voz revisado" })).toBeVisible();
+  expect([...profiles.get(email).values()]).toMatchObject([
+    { description: "Gasto de voz revisado", amount: 4290, category: "Café" },
+  ]);
+  expect(requests).toBe(1);
+});

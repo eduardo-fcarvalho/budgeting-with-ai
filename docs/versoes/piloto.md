@@ -46,8 +46,9 @@ da `main` está em prévia local para Eduardo avaliar o frontend antes de decidi
 
 ## Interface e análise por categoria
 
-- O lançamento manual abre pelo botão central no celular. O formulário permite reutilizar uma
-  categoria pessoal ou digitar uma nova.
+- O botão central no celular oferece registro manual e por voz. O editor permite reutilizar
+  uma categoria pessoal ou digitar uma nova.
+  [Sistema visual do BG-07](../../design-system/budgeting-with-ai/MASTER.md)
 - O resumo começa no mês corrente. Os períodos diário, semanal, mensal e anual controlam os totais
   por categoria e o histórico. A semana começa na segunda-feira. Selecionar uma categoria no painel
   filtra o histórico.

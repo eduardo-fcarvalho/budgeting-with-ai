@@ -20,7 +20,6 @@ export function ExpenseHistory({
   onEdit,
   onDelete,
   periodLabel,
-  notice,
   recent = false,
   onHistory,
 }: {
@@ -33,7 +32,6 @@ export function ExpenseHistory({
   onEdit: (expense: Expense) => void;
   onDelete: (id: string) => Promise<void>;
   periodLabel?: string;
-  notice?: string;
   recent?: boolean;
   onHistory?: () => void;
 }) {
@@ -103,7 +101,7 @@ export function ExpenseHistory({
         </div>
       )}
       <div className="history-feedback" role="status">
-        {notice || (deleted ? "Gasto excluído." : "")}
+        {deleted ? "Gasto excluído." : ""}
       </div>
       {!ready || !visibleRows.length ? (
         <div className="dashboard-empty">

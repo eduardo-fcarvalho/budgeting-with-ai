@@ -74,7 +74,9 @@ export function VoiceRecorder({
     abortRef.current = session;
     try {
       const stop = await record(() => {
-        if (!session.signal.aborted) void finish();
+        if (session.signal.aborted) return;
+        setElapsed(limitSeconds);
+        void finish();
       }, session.signal);
       if (!session.signal.aborted) {
         stopRef.current = stop;
