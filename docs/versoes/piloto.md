@@ -1,7 +1,8 @@
 # Piloto
 
-Em 24 de novembro de 2026, os PRs de preparação e implementação foram mesclados. A versão
-da `main` está em prévia local para Eduardo avaliar o frontend antes de decidir sobre o deploy.
+Em 24 de novembro de 2026, os PRs de preparação e implementação foram mesclados.
+Eduardo aprovou o visual do [redesenho do diário](https://github.com/eduardo-fcarvalho/budgeting-with-ai/issues/7)
+na avaliação local. O uso da PWA nos dois celulares ainda precisa ser validado.
 [Preparação #2](https://github.com/eduardo-fcarvalho/budgeting-with-ai/pull/2) · [Piloto #4](https://github.com/eduardo-fcarvalho/budgeting-with-ai/pull/4) · [Card #3](https://github.com/eduardo-fcarvalho/budgeting-with-ai/issues/3)
 
 ## Entregue
@@ -35,7 +36,7 @@ da `main` está em prévia local para Eduardo avaliar o frontend antes de decidi
 
 ## Antes da publicação
 
-1. Eduardo testa a prévia, avalia o frontend e decide se a interface está pronta para ser publicada.
+1. Eduardo revisa o PR do redesenho e decide se a interface está pronta para ser publicada.
    O [README](../../README.md#rodar-o-piloto) registra como iniciar a aplicação localmente.
 2. Com a interface aprovada, escolher a hospedagem com endereço HTTPS incluído e configurar o PostgreSQL
    e o backup externo. Na publicação, confirmar a instalação e o uso da PWA nos dois celulares.
