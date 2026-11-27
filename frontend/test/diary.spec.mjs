@@ -7,10 +7,11 @@ const profiles = new Map();
 let account = null;
 let server;
 let url;
+let shellRevision = "";
 test.beforeAll(async () => {
   // Fictitious single browser session. Data reads also assert the active owner.
   server = createServer(async (req, res) => {
-    const path = req.url;
+    const { pathname: path } = new URL(req.url, "http://localhost");
     if (path.startsWith("/api/")) {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
@@ -67,6 +68,17 @@ test.beforeAll(async () => {
     try {
       const file = path === "/" ? "index.html" : path.slice(1);
       const bytes = await readFile(new URL("../dist/" + file, import.meta.url));
+      let body = bytes;
+      if (shellRevision && file === "index.html") {
+        body = bytes
+          .toString()
+          .replace("</title>", ` (${shellRevision})</title>`);
+      }
+      if (shellRevision && file === "sw.js") {
+        body = bytes
+          .toString()
+          .replace(/(const name = "[^"]+)(";)/, `$1-${shellRevision}$2`);
+      }
       const types = {
         ".html": "text/html",
         ".js": "text/javascript",
@@ -77,7 +89,7 @@ test.beforeAll(async () => {
       res.writeHead(200, {
         "Content-Type": types[extname(file)] || "application/octet-stream",
       });
-      res.end(bytes);
+      res.end(body);
     } catch {
       res.writeHead(404);
       res.end();
@@ -90,21 +102,24 @@ test.afterAll(async () => {
   await new Promise((resolve) => server.close(resolve));
 });
 
+async function login(page, email) {
+  await page.getByLabel("E-mail").fill(email);
+  await page.getByLabel("Senha").fill("somente-teste");
+  await page.getByRole("button", { name: "Acessar meu diário" }).click();
+}
+
 test("consulta offline e logout eliminam o histórico em todas as abas", async ({
   page,
   context,
 }) => {
-  async function login(email) {
-    await page.getByLabel("E-mail").fill(email);
-    await page.getByLabel("Senha").fill("somente-teste");
-    await page.getByRole("button", { name: "Acessar meu diário" }).click();
-    await expect(
-      page.getByRole("button", { name: "Novo gasto" }),
-    ).toBeEnabled();
-  }
   await page.goto(url);
-  await login("a@example.test");
-  await page.getByRole("button", { name: "Novo gasto" }).click();
+  await login(page, "a@example.test");
+  const add = page.getByRole("button", { name: "Novo gasto" });
+  await expect(add).toBeEnabled();
+  const bounds = await add.boundingBox();
+  expect(bounds.x + bounds.width / 2).toBeCloseTo(page.viewportSize().width / 2, 0);
+  await add.click();
+  await expect(page.getByLabel("Valor (R$)", { exact: true })).toBeFocused();
   await page.getByLabel("Descrição").fill("Almoço de teste");
   await page.getByLabel("Valor (R$)", { exact: true }).fill("42,90");
   await page.getByLabel("Categoria", { exact: true }).fill("Restaurantes");
@@ -138,7 +153,7 @@ test("consulta offline e logout eliminam o histórico em todas as abas", async (
   await expect(second.getByLabel("E-mail")).toBeVisible();
   await context.setOffline(false);
   await expect.poll(() => account).toBeNull();
-  await login("b@example.test");
+  await login(page, "b@example.test");
   await expect(
     page.getByText("Nenhum gasto em", { exact: false }),
   ).toBeVisible();
@@ -166,9 +181,7 @@ test("voz abre rascunho editável e descartar mantém o histórico intacto", asy
   account = null;
   await context.grantPermissions(["microphone"], { origin: url });
   await page.goto(url);
-  await page.getByLabel("E-mail").fill("voz@example.test");
-  await page.getByLabel("Senha").fill("somente-teste");
-  await page.getByRole("button", { name: "Acessar meu diário" }).click();
+  await login(page, "voz@example.test");
   await page.getByRole("button", { name: "Novo gasto" }).click();
   await page.getByRole("button", { name: "Gravar gasto" }).click();
   const stop = page.getByRole("button", { name: "Parar e interpretar" });
@@ -188,4 +201,208 @@ test("voz abre rascunho editável e descartar mantém o histórico intacto", asy
   await expect(
     page.getByText("Nenhum gasto em", { exact: false }),
   ).toBeVisible();
+});
+
+test("atalho do manifesto abre a voz e preserva a alternativa de um toque", async ({
+  page,
+  context,
+}) => {
+  account = null;
+  await page.goto(url);
+  const response = await page.request.get(url + "/manifest.webmanifest");
+  const manifest = await response.json();
+  const shortcut = manifest.shortcuts.find(({ name }) => name === "Gravar gasto");
+  expect(shortcut).toBeDefined();
+
+  await page.goto(new URL(shortcut.url, url).href);
+  await login(page, "atalho@example.test");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  const start = page.getByRole("button", { name: "Gravar gasto", exact: true });
+  await expect(start).toBeFocused();
+  await expect(page).toHaveURL(url + "/");
+  await page.getByRole("button", { name: "Fechar", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await expect
+    .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller))
+    .toBeTruthy();
+  await context.setOffline(true);
+  await page.goto(new URL(shortcut.url, url).href);
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(start).toBeDisabled();
+});
+
+test("atalho da PWA em primeiro plano usa o microfone já autorizado", async ({
+  page,
+  context,
+}) => {
+  account = null;
+  let audioRequests = 0;
+  page.on("request", (request) => {
+    if (request.url() === url + "/api/drafts") audioRequests++;
+  });
+  await context.grantPermissions(["microphone"], { origin: url });
+  await page.addInitScript(() => {
+    const original = window.matchMedia.bind(window);
+    window.matchMedia = (query) =>
+      query === "(display-mode: standalone)" ? { matches: true } : original(query);
+  });
+  await page.goto(url);
+  await login(page, "instalado@example.test");
+  await expect(page.getByRole("button", { name: "Novo gasto" })).toBeEnabled();
+  const stop = page.getByRole("button", { name: "Parar e interpretar" });
+  const start = page.getByRole("button", { name: "Gravar gasto", exact: true });
+  await page.goto(url + "/?acao=gravar");
+  await expect(stop).toBeEnabled();
+  await page.getByRole("button", { name: "Cancelar gravação" }).click();
+  await expect(start).toBeEnabled();
+
+  await page.clock.install();
+  await page.goto(url + "/?acao=gravar");
+  await expect(stop).toBeEnabled();
+  await page.clock.fastForward(30_001);
+  await expect(start).toBeEnabled();
+
+  await page.goto(url + "/?acao=gravar");
+  await expect(stop).toBeEnabled();
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { value: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect(start).toBeEnabled();
+  expect(audioRequests).toBe(0);
+  expect(profiles.get(account).size).toBe(0);
+});
+
+test("totais por categoria acompanham o período e filtram o histórico", async ({
+  page,
+}) => {
+  account = null;
+  const fixtures = [
+    ["2026-03-15", "Almoço de domingo", 5000, "Alimentação"],
+    ["2026-03-09", "Ônibus de segunda", 1000, "Transporte"],
+    ["2026-03-08", "Café da semana anterior", 2000, "Alimentação"],
+    ["2026-01-21", "Mercado de janeiro", 3000, "Mercado"],
+  ];
+  const rows = fixtures.map(([date, description, amount, category], index) => {
+    const id = String(index);
+    return [id, { id, date, description, amount, category }];
+  });
+  profiles.set("periodo@example.test", new Map(rows));
+  await page.clock.setFixedTime(new Date(2026, 2, 15, 12));
+  await page.goto(url);
+  await login(page, "periodo@example.test");
+  const categories = page.getByRole("region", { name: "Por categoria" });
+  const food = categories.getByRole("button", { name: /Alimentação/ });
+  const transport = categories.getByRole("button", { name: /Transporte/ });
+  const market = categories.getByRole("button", { name: /Mercado/ });
+  const lunch = page.getByRole("heading", { name: "Almoço de domingo" });
+  const bus = page.getByRole("heading", { name: "Ônibus de segunda" });
+  const coffee = page.getByRole("heading", { name: "Café da semana anterior" });
+  const groceries = page.getByRole("heading", { name: "Mercado de janeiro" });
+  await expect(lunch).toBeVisible();
+  await expect(coffee).toBeVisible();
+  await expect(groceries).toHaveCount(0);
+  await expect(food).toContainText("70,00");
+  await expect(transport).toContainText("12,5%");
+  await expect(categories.getByRole("button")).toHaveCount(2);
+
+  await page.getByRole("button", { name: "Diário", exact: true }).click();
+  await expect(lunch).toBeVisible();
+  await expect(bus).toHaveCount(0);
+  await expect(food).toContainText("50,00");
+  await expect(food).toContainText("100%");
+  await expect(transport).toHaveCount(0);
+  await page.getByRole("button", { name: "Semanal", exact: true }).click();
+  await expect(bus).toBeVisible();
+  await expect(coffee).toHaveCount(0);
+  await expect(food).toContainText("83,3%");
+  await expect(transport).toContainText("10,00");
+  await page.getByRole("button", { name: "Anual", exact: true }).click();
+  await expect(groceries).toBeVisible();
+  await expect(food).toContainText("63,6%");
+  await expect(market).toContainText("30,00");
+
+  await food.click();
+  await expect(food).toHaveAttribute("aria-pressed", "true");
+  await expect(lunch).toBeVisible();
+  await expect(coffee).toBeVisible();
+  await expect(bus).toHaveCount(0);
+  await page.getByRole("button", { name: "Limpar filtro" }).click();
+  await expect(bus).toBeVisible();
+  await page.getByRole("button", { name: "Mensal", exact: true }).click();
+  await page.getByLabel("Selecionar mês").fill("2026-01");
+  await expect(groceries).toBeVisible();
+  await expect(market).toContainText("100%");
+  await page.getByRole("button", { name: "Próximo mês" }).click();
+  await expect(groceries).toHaveCount(0);
+  await expect(categories.getByText("Sem gastos neste período.")).toBeVisible();
+  await page.getByRole("button", { name: "Mês anterior" }).click();
+  await expect(groceries).toBeVisible();
+});
+
+test("tema segue o sistema e lembra a escolha no diário e no login", async ({
+  page,
+}) => {
+  account = null;
+  await page.setViewportSize({ width: 320, height: 760 });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto(url);
+  const toggle = page.getByRole("button", { name: "Tema escuro" });
+  const root = page.locator("html");
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(root).toHaveCSS("color-scheme", "dark");
+
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await toggle.click();
+  await login(page, "tema@example.test");
+  await expect(page.getByRole("heading", { name: "Meus gastos" })).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(root).toHaveCSS("color-scheme", "dark");
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Meus gastos" })).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Sair", exact: true }).click();
+  await expect(page.getByLabel("E-mail")).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await toggle.click();
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(root).toHaveCSS("color-scheme", "light");
+});
+
+test("recarregar recebe a nova versão mesmo com outra aba aberta", async ({
+  page,
+  context,
+}) => {
+  account = null;
+  await page.goto(url);
+  const originalTitle = await page.title();
+  await expect
+    .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller))
+    .toBeTruthy();
+  const second = await context.newPage();
+  await second.goto(url);
+
+  shellRevision = "atualizada";
+  try {
+    await page.reload();
+    await expect(page).toHaveTitle(`${originalTitle} (atualizada)`);
+    await expect(second).toHaveTitle(originalTitle);
+    await expect.poll(() =>
+      page.evaluate(async () => {
+        const shells = (await caches.keys()).filter((key) =>
+          key.startsWith("budgeting-shell-"),
+        );
+        return shells.length === 1 && shells[0].endsWith("-atualizada");
+      }),
+    ).toBeTruthy();
+    await context.setOffline(true);
+    await page.reload();
+    await expect(page).toHaveTitle(`${originalTitle} (atualizada)`);
+  } finally {
+    shellRevision = "";
+  }
 });

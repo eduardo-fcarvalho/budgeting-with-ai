@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cents, monthRows, totals, localDate } from "../src/domain.ts";
+import { cents, periodRows, movePeriod, totals, localDate } from "../src/domain.ts";
 import { encodeWav } from "../src/wav.ts";
 
 test("valores em centavos sem arredondar centavos extras", () => {
@@ -34,7 +34,7 @@ test("datas locais e totais por categoria respeitam o mês", () => {
       category: "Mercado",
     },
   ];
-  const rows = monthRows(entries, "2026-03");
+  const rows = periodRows(entries, "month", "2026-03-15");
   assert.deepEqual(
     rows.map((x) => x.description),
     ["Leite", "Chá", "Pão"],
@@ -43,6 +43,25 @@ test("datas locais e totais por categoria respeitam o mês", () => {
     ["Mercado", 540],
     ["Outros", 500],
   ]);
+});
+
+test("períodos incluem suas extremidades e semanas começam na segunda", () => {
+  const dates = ["2025-12-28", "2025-12-29", "2026-01-01", "2026-01-04", "2026-01-05"];
+  const entries = dates.map((date) => ({ date }));
+  const matchingDates = (period) =>
+    periodRows(entries, period, "2026-01-01").map(({ date }) => date);
+
+  assert.deepEqual(matchingDates("day"), ["2026-01-01"]);
+  assert.deepEqual(matchingDates("week"), ["2026-01-04", "2026-01-01", "2025-12-29"]);
+  assert.deepEqual(matchingDates("year"), ["2026-01-05", "2026-01-04", "2026-01-01"]);
+  assert.equal(movePeriod("week", "2026-01-04", 1), "2026-01-05");
+  assert.equal(movePeriod("month", "2026-01-31", 1), "2026-02-01");
+  assert.equal(movePeriod("day", "2024-02-29", -1), "2024-02-28");
+  assert.equal(movePeriod("year", "2024-02-29", 1), "2025-01-01");
+  assert.equal(movePeriod("month", "9999-12-01", 1), "9999-12-01");
+  assert.equal(movePeriod("day", "0001-01-01", -1), "0001-01-01");
+  const lastDay = { date: "9999-12-31" };
+  assert.deepEqual(periodRows([lastDay], "week", lastDay.date), [lastDay]);
 });
 
 test("WAV PCM mono tem duração limitada, taxa e tamanhos corretos", async () => {

@@ -1,8 +1,14 @@
 import { encodeWav } from "./wav";
 
-export async function record(onLimit: () => void, signal: AbortSignal) {
+export async function record(
+  onLimit: () => void,
+  signal: AbortSignal,
+  fromShortcut = false,
+) {
   if (!navigator.mediaDevices?.getUserMedia || !window.AudioContext)
     throw new Error("Microfone indisponível. Você pode digitar o gasto.");
+  if (fromShortcut && document.hidden)
+    throw new Error("Toque em Gravar gasto para ativar o microfone.");
   const context = new AudioContext();
   let stream: MediaStream | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -10,6 +16,9 @@ export async function record(onLimit: () => void, signal: AbortSignal) {
   const chunks: Float32Array[] = [];
   let size = 0;
   let closed = false;
+  function stopWhenHidden() {
+    if (document.hidden) onLimit();
+  }
   function release() {
     closed = true;
     clearTimeout(timer);
@@ -17,10 +26,24 @@ export async function record(onLimit: () => void, signal: AbortSignal) {
     stream?.getTracks().forEach((track) => track.stop());
     if (context.state !== "closed") void context.close().catch(() => {});
     signal.removeEventListener("abort", release);
+    document.removeEventListener("visibilitychange", stopWhenHidden);
   }
   signal.addEventListener("abort", release, { once: true });
+  if (fromShortcut)
+    document.addEventListener("visibilitychange", stopWhenHidden);
   try {
-    const resumed = context.resume();
+    const resumed = fromShortcut
+      ? Promise.race([
+          context.resume(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () =>
+                reject(new Error("Toque em Gravar gasto para ativar o microfone.")),
+              2000,
+            );
+          }),
+        ])
+      : context.resume();
     // Wait for permission in parallel with the user-gesture resume.
     await Promise.all([
       resumed,
@@ -31,6 +54,7 @@ export async function record(onLimit: () => void, signal: AbortSignal) {
           if (closed) s.getTracks().forEach((track) => track.stop());
         }),
     ]);
+    clearTimeout(timer);
     signal.throwIfAborted();
     await context.audioWorklet.addModule("/recorder.js");
     signal.throwIfAborted();

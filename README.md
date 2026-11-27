@@ -2,14 +2,18 @@
 
 Diário pessoal de gastos em reais, com conferência de lançamentos ditados e consulta offline no celular.
 
-O piloto está em desenvolvimento. Consulte [briefing](docs/briefing.md), [status](docs/versoes/piloto.md)
-e [pesquisa de voz e hospedagem](docs/pesquisa-piloto.md).
+O piloto foi mesclado e está em avaliação local. A aprovação do frontend por Eduardo vem antes da publicação.
+Consulte o [registro do piloto](docs/versoes/piloto.md) e o [briefing](docs/briefing.md).
+
+No celular, **Novo gasto** abre o formulário manual. O painel mostra os totais por categoria pessoal
+no dia, semana, mês ou ano selecionado e permite filtrar o histórico. O tema pode ser claro ou escuro.
 
 ## Rodar o piloto
 
 Use Docker Compose e defina `POSTGRES_PASSWORD` no ambiente ou em uma cópia local de
 `.env.example`. Para testar no computador, execute
-`COOKIE_SECURE=false docker compose up --build -d` e abra http://localhost:8080.
+`OPENAI_API_KEY= COOKIE_SECURE=false docker compose up --build -d` e abra http://localhost:8080.
+Essa configuração permite avaliar o diário manual e a consulta offline sem chamadas de voz.
 A primeira inicialização cria as tabelas com Flyway. O volume PostgreSQL é exclusivo do piloto.
 A [PoC e seu Compose MySQL](poc/README.md) estão preservados com a documentação original.
 

@@ -16,7 +16,9 @@ await writeFile(
 const name = ${JSON.stringify(name)};
 const publicFiles = new Set(${JSON.stringify(assets)});
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(name).then(cache => cache.addAll([...publicFiles])));
+  event.waitUntil(caches.open(name)
+    .then(cache => cache.addAll([...publicFiles].map(file => new Request(file, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
@@ -28,10 +30,17 @@ self.addEventListener('activate', event => {
 });
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-  if (event.request.method !== 'GET' || url.origin !== location.origin || url.search) return;
+  if (event.request.method !== 'GET' || url.origin !== location.origin) return;
+  if (url.search && !(event.request.mode === 'navigate' && url.pathname === '/' && url.search === '?acao=gravar')) return;
   const file = url.pathname === '/' ? '/index.html' : url.pathname;
   if (!publicFiles.has(file)) return;
-  event.respondWith(caches.open(name).then(async cache => (await cache.match(file)) || fetch(event.request)));
+  const cached = () => caches.match(file, { cacheName: name });
+  if (file === '/index.html' && event.request.mode === 'navigate') {
+    event.respondWith(fetch(event.request, { cache: 'no-store' })
+      .catch(async () => (await cached()) || Response.error()));
+    return;
+  }
+  event.respondWith(cached().then(response => response || fetch(event.request)));
 });
 `,
 );

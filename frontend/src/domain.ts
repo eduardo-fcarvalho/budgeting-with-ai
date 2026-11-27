@@ -32,15 +32,52 @@ export function cents(value: string): number | null {
 
 export function localDate(d = new Date()) {
   return [
-    d.getFullYear(),
+    String(d.getFullYear()).padStart(4, "0"),
     String(d.getMonth() + 1).padStart(2, "0"),
     String(d.getDate()).padStart(2, "0"),
   ].join("-");
 }
 
-export function monthRows(expenses: Expense[], month: string) {
+export type Period = "day" | "week" | "month" | "year";
+
+function periodStart(period: Period, date: string) {
+  const start = new Date(date + "T12:00:00");
+  if (period === "year") start.setMonth(0, 1);
+  if (period === "month") start.setDate(1);
+  if (period === "week")
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  return start;
+}
+
+function shiftPeriod(start: Date, period: Period, step: number) {
+  const date = new Date(start);
+  if (period === "year") date.setFullYear(date.getFullYear() + step);
+  else if (period === "month") date.setMonth(date.getMonth() + step);
+  else date.setDate(date.getDate() + step * (period === "week" ? 7 : 1));
+  return date;
+}
+
+export function movePeriod(period: Period, date: string, step: number) {
+  const next = shiftPeriod(periodStart(period, date), period, step);
+  return next.getFullYear() < 1 || next.getFullYear() > 9999
+    ? date
+    : localDate(next);
+}
+
+export function periodBounds(period: Period, date: string) {
+  const start = periodStart(period, date);
+  const end = shiftPeriod(start, period, 1);
+  end.setDate(end.getDate() - 1);
+  if (end.getFullYear() > 9999) end.setFullYear(9999, 11, 31);
+  return { start, end };
+}
+
+export function periodRows(expenses: Expense[], period: Period, date: string) {
+  const { start, end } = periodBounds(period, date);
+  const from = localDate(start);
+  const through = localDate(end);
   return expenses
-    .filter((row) => row.date.slice(0, 7) === month)
+    .filter((row) => row.date >= from && row.date <= through)
     .sort(
       (a, b) =>
         b.date.localeCompare(a.date) ||
