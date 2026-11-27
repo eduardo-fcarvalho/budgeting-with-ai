@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import { message } from "./api";
+import { HttpError, message } from "./api";
 import { CategoryDot } from "./Breakdown";
 import { cents, localDate, money, type Draft, type Expense } from "./domain";
 import { Icon } from "./Icon";
@@ -33,7 +33,7 @@ export function ExpenseEditor({
   diary: ReturnType<typeof useDiary>;
   expense: Expense | null;
   mode: Mode;
-  done: (saved?: boolean) => void;
+  done: (savedDate?: string) => void;
 }) {
   const [id] = useState(() => expense?.id || crypto.randomUUID());
   const [view, setView] = useState<Mode>(mode);
@@ -53,6 +53,8 @@ export function ExpenseEditor({
   const confirmationTitle = useRef<HTMLHeadingElement>(null);
   const keepEditing = useRef<HTMLButtonElement>(null);
   const summary = useRef<HTMLDivElement>(null);
+  const saveButton = useRef<HTMLButtonElement>(null);
+  const saveError = useRef<HTMLParagraphElement>(null);
   const amount = cents(price);
   const cleanCategory = category.trim();
   const original = appliedDraft ?? {
@@ -149,6 +151,12 @@ export function ExpenseEditor({
     (summary.current ?? modal.current?.querySelector<HTMLElement>("[aria-invalid=true]"))?.focus();
   }, [attempt]);
 
+  useLayoutEffect(() => {
+    if (!error || saving) return;
+    const button = saveButton.current;
+    (button && !button.disabled ? button : saveError.current)?.focus();
+  }, [error, saving]);
+
   function show(next: Mode) {
     setAttempt(0);
     setError("");
@@ -212,9 +220,11 @@ export function ExpenseEditor({
           category: cleanCategory,
         }),
       );
-      done(true);
+      done(date);
     } catch (err) {
-      setError(message(err));
+      setError(err instanceof HttpError && err.status === 503
+        ? "Falha temporária ao salvar o gasto. Os campos foram mantidos. Tente novamente."
+        : message(err));
     } finally {
       setSaving(false);
     }
@@ -366,10 +376,11 @@ export function ExpenseEditor({
             </small>
           )}
           {!diary.online && <p className="editor-alert" role="status">Reconecte para salvar o gasto.</p>}
-          {error && <p className="editor-alert" role="alert">{error}</p>}
+          {error && <p className="editor-alert" role="alert" ref={saveError} tabIndex={-1}>{error}</p>}
           <div className="editor-actions">
             <button
               type="submit"
+              ref={saveButton}
               className="primary"
               disabled={saving || diary.busy || !diary.online}
             >

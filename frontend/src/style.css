@@ -127,7 +127,9 @@ button:disabled, button[aria-disabled="true"] { cursor: default; opacity: 0.6; }
   margin: 0 0 var(--space-4);
 }
 .notice { color: var(--warning-ink); background: var(--warning-bg); }
-.success-banner { display: flex; gap: var(--space-2); align-items: center; color: var(--green); background: var(--soft); animation: arrive var(--enter) var(--ease) both; }
+.success-banner { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; color: var(--green); background: var(--soft); animation: arrive var(--enter) var(--ease) both; }
+.success-banner > [role="status"] { display: flex; gap: var(--space-2); align-items: center; }
+.success-banner > [role="status"] > svg { flex: none; }
 
 .voice-card {
   display: flex;

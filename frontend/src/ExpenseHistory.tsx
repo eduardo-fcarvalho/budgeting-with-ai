@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type RefObject } from "react";
 import { message } from "./api";
 import { CategoryDot, categoryColor } from "./Breakdown";
 import { money, type Expense } from "./domain";
@@ -26,6 +26,7 @@ export function ExpenseHistory({
   periodLabel,
   recent = false,
   onHistory,
+  headingRef,
 }: {
   rows: Expense[];
   ready: boolean;
@@ -38,9 +39,11 @@ export function ExpenseHistory({
   periodLabel?: string;
   recent?: boolean;
   onHistory?: () => void;
+  headingRef?: RefObject<HTMLHeadingElement | null>;
 }) {
   const title = useId();
-  const heading = useRef<HTMLHeadingElement>(null);
+  const internalHeading = useRef<HTMLHeadingElement>(null);
+  const heading = headingRef ?? internalHeading;
   const deleteTrigger = useRef<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState("");

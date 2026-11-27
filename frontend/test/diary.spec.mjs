@@ -341,15 +341,25 @@ test("totais por categoria acompanham o período e filtram o histórico", async 
   await expect(food).toContainText("63,6%");
   await expect(market).toContainText("30,00");
 
+  await page.setViewportSize({ width: 320, height: 700 });
   await food.click();
   await expect(food).toHaveAccessibleName(/Filtrar gastos recentes por Alimentação/);
   await expect(food).toHaveAttribute("aria-pressed", "true");
-  await expect(food.getByText("Gastos recentes filtrados", { exact: true })).toBeVisible();
+  const filtered = categories.getByRole("button", { name: "Ver gastos filtrados" });
+  await expect(filtered).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+  await filtered.focus();
+  await page.keyboard.press("Enter");
+  const recentTitle = page.getByRole("heading", { name: "Gastos recentes" });
+  await expect(recentTitle).toBeFocused();
+  await expect(recentTitle).toBeInViewport();
+  await expect(page).toHaveURL(url + "/");
   await expect(lunch).toBeVisible();
   await expect(coffee).toBeVisible();
   await expect(bus).toHaveCount(0);
   await page.getByRole("button", { name: "Limpar filtro" }).click();
   await expect(food).toHaveAttribute("aria-pressed", "false");
+  await expect(filtered).toHaveCount(0);
   await expect(bus).toBeVisible();
   await page.getByRole("button", { name: "Mensal", exact: true }).click();
   await page.getByLabel("Selecionar mês").fill("2026-01");
@@ -712,9 +722,58 @@ test("o primeiro gasto pode ser preenchido direto no Início", async ({ page }) 
   await editor.getByLabel("Data", { exact: true }).fill("2026-02-28");
   await editor.getByLabel("Categoria", { exact: true }).fill("Casa");
   await editor.getByRole("button", { name: "Confirmar gasto" }).click();
-  await expect(page.getByText("Gasto confirmado.")).toBeVisible();
+  await expect(page.getByText("Gasto confirmado para 28 de fevereiro de 2026.")).toBeVisible();
   await expect(manual).toHaveCount(0);
   await expect(page.getByText("Sem gastos neste período.")).toBeVisible();
-  await page.getByRole("button", { name: "Mês anterior" }).click();
+  await page.getByRole("button", { name: "Ver no Histórico" }).click();
+  await expect(page).toHaveURL(/#historico$/);
   await expect(page.getByRole("heading", { name: "Gasto fictício do mês passado" })).toBeVisible();
+
+  const search = page.getByRole("searchbox", { name: "Buscar no histórico" });
+  await search.fill("sem resultado");
+  await page.getByRole("button", { name: "Novo gasto" }).click();
+  await page.getByRole("dialog", { name: "Novo gasto" })
+    .getByRole("button", { name: "Preencher manualmente" }).click();
+  await price.fill("18,00");
+  await editor.getByLabel("Descrição").fill("Gasto fictício de outro dia");
+  await editor.getByLabel("Categoria", { exact: true }).fill("Casa");
+  await editor.getByRole("button", { name: "Confirmar gasto" }).click();
+  await page.getByRole("button", { name: "Ver no Histórico" }).click();
+  await expect(search).toHaveValue("");
+  await expect(page.getByRole("heading", { name: "Gasto fictício de outro dia" })).toBeVisible();
+});
+
+test("falha temporária no salvamento mantém campos e devolve o foco à tentativa", async ({ page }) => {
+  account = null;
+  const email = "repetir-salvamento@example.test";
+  const requests = [];
+  await page.route(url + "/api/expenses", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    requests.push(route.request().postDataJSON());
+    if (requests.length === 1) return route.fulfill({ status: 503, json: {} });
+    return route.continue();
+  });
+  await page.goto(url);
+  await login(page, email);
+  await page.getByRole("main").getByRole("button", { name: "Preencher manualmente" }).click();
+  const editor = page.getByRole("dialog", { name: "Novo gasto" });
+  const price = editor.getByLabel("Valor (R$)", { exact: true });
+  await price.fill("21,90");
+  await editor.getByLabel("Descrição").fill("Gasto fictício");
+  await editor.getByLabel("Categoria", { exact: true }).fill("Casa");
+  const save = editor.getByRole("button", { name: /Confirmar gasto|Tentar novamente/ });
+  await save.click();
+
+  const error = editor.getByRole("alert");
+  await expect(error).toContainText(/salvar|salvamento/i);
+  await expect(error).toContainText(/mantid|preservad/i);
+  await expect(error).not.toContainText("Você pode digitar");
+  await expect(price).toHaveValue("21,90");
+  await expect(save).toBeFocused();
+  expect(profiles.get(email).size).toBe(0);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "Gasto fictício" })).toBeVisible();
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toEqual(requests[0]);
+  expect(profiles.get(email).size).toBe(1);
 });

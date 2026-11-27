@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "re
 import { message } from "./api";
 import { AppShell, Brand, type Screen } from "./AppShell";
 import { Breakdown } from "./Breakdown";
-import { localDate, periodRows, totals, type Expense, type Period } from "./domain";
+import { localDate, periodBounds, periodRows, totals, type Expense, type Period } from "./domain";
 import { ExpenseEditor } from "./ExpenseEditor";
 import { ExpenseHistory } from "./ExpenseHistory";
 import { Icon } from "./Icon";
@@ -149,9 +149,11 @@ function Book({ diary }: { diary: Diary }) {
   const [historyCategory, setHistoryCategory] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
   const [editor, setEditor] = useState<OpenEditor | null>(null);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<{ text: string; date?: string } | null>(null);
+  const [historyRevision, setHistoryRevision] = useState(0);
   const restoreTo = useRef<HTMLElement | null>(null);
   const moveFocus = useRef(false);
+  const recentHeading = useRef<HTMLHeadingElement>(null);
   const { busy, data, online } = diary;
 
   useEffect(() => {
@@ -196,7 +198,7 @@ function Book({ diary }: { diary: Diary }) {
   function openEditor(mode: OpenEditor["mode"], expense: Expense | null = null) {
     if (!choosing) restoreTo.current = document.activeElement as HTMLElement | null;
     setChoosing(false);
-    setNotice("");
+    setNotice(null);
     setEditor({ expense, mode });
   }
 
@@ -211,6 +213,29 @@ function Book({ diary }: { diary: Diary }) {
   function openHistory(category: string | null) {
     setHistoryCategory(category);
     navigate("history");
+  }
+
+  function finishEditing(savedDate?: string) {
+    if (savedDate) {
+      const { start, end } = periodBounds(period, date);
+      const text = editor?.expense ? "Alterações salvas" : "Gasto confirmado";
+      setNotice(savedDate < localDate(start) || savedDate > localDate(end)
+        ? { text: `${text} para ${periodName("day", savedDate)}.`, date: savedDate }
+        : { text: `${text}.` });
+    }
+    setEditor(null);
+  }
+
+  function openSavedExpense() {
+    if (!notice?.date) return;
+    changePeriod("day", notice.date);
+    setHistoryRevision((revision) => revision + 1);
+    setNotice({ text: notice.text });
+    openHistory(null);
+    if (screen === "history") {
+      document.getElementById("diario")?.focus({ preventScroll: true });
+      scrollTo(0, 0);
+    }
   }
 
   const expenses = data?.expenses || [];
@@ -232,6 +257,7 @@ function Book({ diary }: { diary: Diary }) {
     const category = recent ? homeCategory : historyCategory;
     return (
       <ExpenseHistory
+        key={recent ? undefined : historyRevision}
         rows={category ? rows.filter((row) => row.category === category) : rows}
         ready={ready}
         busy={busy}
@@ -242,6 +268,7 @@ function Book({ diary }: { diary: Diary }) {
         onDelete={async (id) => { await diary.mutate("expenses/" + id, "DELETE"); }}
         periodLabel={periodName(period, date)}
         recent={recent}
+        headingRef={recent ? recentHeading : undefined}
         onHistory={() => openHistory(homeCategory)}
       />
     );
@@ -262,8 +289,15 @@ function Book({ diary }: { diary: Diary }) {
         <div className="screen-content" key={screen}>
           <div className="page-heading"><h1>{screenTitle[screen]}</h1></div>
           {diary.notice && <p role="status" className="notice">{diary.notice}</p>}
-          <div role="status" className={notice ? "success-banner" : undefined}>
-            {notice && <><Icon name="check" />{notice}</>}
+          <div className={notice ? "success-banner" : undefined}>
+            <div role="status">
+              {notice && <><Icon name="check" /><span>{notice.text}</span></>}
+            </div>
+            {notice?.date && (
+              <button type="button" className="text" onClick={openSavedExpense}>
+                Ver no Histórico
+              </button>
+            )}
           </div>
           {screen === "home" && (
             <>
@@ -297,6 +331,10 @@ function Book({ diary }: { diary: Diary }) {
                   total={total}
                   selected={homeCategory}
                   onSelect={(category) => setHomeCategory(homeCategory === category ? null : category)}
+                  onViewFiltered={() => {
+                    recentHeading.current?.focus({ preventScroll: true });
+                    recentHeading.current?.scrollIntoView({ block: "start" });
+                  }}
                   ready={ready}
                 />
                 {expenseHistory(true)}
@@ -348,10 +386,7 @@ function Book({ diary }: { diary: Diary }) {
           diary={diary}
           expense={editor.expense}
           mode={editor.mode}
-          done={(saved) => {
-            if (saved) setNotice(editor.expense ? "Alterações salvas." : "Gasto confirmado.");
-            setEditor(null);
-          }}
+          done={finishEditing}
         />
       )}
     </>

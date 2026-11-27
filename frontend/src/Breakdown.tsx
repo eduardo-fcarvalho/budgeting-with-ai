@@ -31,12 +31,14 @@ export function Breakdown({
   total,
   selected,
   onSelect,
+  onViewFiltered,
   ready,
 }: {
   groups: [string, number][];
   total: number;
   selected?: string | null;
   onSelect: (category: string) => void;
+  onViewFiltered?: () => void;
   ready: boolean;
 }) {
   const title = useId();
@@ -106,7 +108,6 @@ export function Breakdown({
                       </span>
                       {opensHistory && <Icon name="chevronRight" size={14} className="legend-next" />}
                     </span>
-                    {active && <span className="legend-feedback">Gastos recentes filtrados</span>}
                     {!showDonut && (
                       <span className="bar-track" aria-hidden="true">
                         <span
@@ -116,6 +117,11 @@ export function Breakdown({
                       </span>
                     )}
                   </button>
+                  {active && onViewFiltered && (
+                    <button type="button" className="text legend-action" onClick={onViewFiltered}>
+                      Ver gastos filtrados
+                    </button>
+                  )}
                 </li>
               );
             })}
