@@ -266,6 +266,12 @@
 
 .dashboard-empty p { margin: 0; }
 
+.breakdown-hint {
+  margin: 0 0 var(--space-3);
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
 .breakdown-content,
 .legend {
   min-inline-size: 0;
@@ -329,6 +335,13 @@
 .legend-item:hover,
 .legend-item[aria-pressed="true"] { background: var(--soft); }
 .legend-item[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--green); }
+
+.legend-feedback {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--green);
+  font-size: 0.75rem;
+}
 
 .legend-details {
   display: flex;

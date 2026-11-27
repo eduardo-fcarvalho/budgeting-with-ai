@@ -1,16 +1,27 @@
 import { useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { message } from "./api";
 import { CategoryDot } from "./Breakdown";
-import { cents, localDate, type Draft, type Expense } from "./domain";
+import { cents, localDate, money, type Draft, type Expense } from "./domain";
 import { Icon } from "./Icon";
 import type { useDiary } from "./useDiary";
 import { VoiceRecorder } from "./VoiceRecorder";
 import "./editor.css";
 
 type Mode = "manual" | "voice";
+type EditorFields = {
+  description: string;
+  price: string;
+  date: string;
+  category: string;
+};
 
 function inputPrice(amount: number | null | undefined) {
   return amount ? (amount / 100).toFixed(2).replace(".", ",") : "";
+}
+
+function displayPrice(price: string) {
+  const amount = cents(price);
+  return amount === null ? price.trim() : money(amount);
 }
 
 export function ExpenseEditor({
@@ -31,24 +42,38 @@ export function ExpenseEditor({
   const [price, setPrice] = useState(inputPrice(expense?.amount));
   const [date, setDate] = useState(initialDate);
   const [category, setCategory] = useState(expense?.category || "");
-  const [draftReady, setDraftReady] = useState(false);
-  const [draftToReview, setDraftToReview] = useState<Draft | null>(null);
+  const [appliedDraft, setAppliedDraft] = useState<EditorFields | null>(null);
+  const [draftToReview, setDraftToReview] = useState<EditorFields | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const modal = useRef<HTMLDialogElement>(null);
   const confirmation = useRef<HTMLDialogElement>(null);
+  const confirmationTitle = useRef<HTMLHeadingElement>(null);
   const keepEditing = useRef<HTMLButtonElement>(null);
   const summary = useRef<HTMLDivElement>(null);
   const amount = cents(price);
   const cleanCategory = category.trim();
+  const original = appliedDraft ?? {
+    description: expense?.description ?? "",
+    price: inputPrice(expense?.amount),
+    date: initialDate,
+    category: expense?.category ?? "",
+  };
   const changed =
-    description.trim() !== (expense?.description || "") ||
-    price.trim() !== inputPrice(expense?.amount) ||
-    date !== initialDate ||
-    cleanCategory !== (expense?.category || "");
+    description.trim() !== original.description.trim() ||
+    (amount === null ? price.trim() !== original.price : amount !== cents(original.price)) ||
+    date !== original.date ||
+    cleanCategory !== original.category.trim();
+  const draftReady = appliedDraft !== null;
   const decision = confirmClose ? "close" : draftToReview ? "replace" : null;
+  const comparison = draftToReview && [
+    ["Valor", displayPrice(price), displayPrice(draftToReview.price)],
+    ["Data", date.split("-").reverse().join("/"), draftToReview.date.split("-").reverse().join("/")],
+    ["Descrição", description.trim(), draftToReview.description.trim()],
+    ["Categoria", cleanCategory, draftToReview.category.trim()],
+  ];
   const categories = diary.data?.categories ?? [];
   const categoryName = cleanCategory.toLocaleLowerCase("pt-BR");
   const newCategory = cleanCategory && !categories.some(
@@ -102,7 +127,12 @@ export function ExpenseEditor({
     const dialog = confirmation.current!;
     if (decision) {
       if (!dialog.open) dialog.showModal();
-      keepEditing.current?.focus();
+      if (decision === "replace") {
+        dialog.scrollTop = 0;
+        confirmationTitle.current?.focus({ preventScroll: true });
+      } else {
+        keepEditing.current?.focus();
+      }
     } else if (dialog.open) {
       dialog.close();
     }
@@ -125,19 +155,25 @@ export function ExpenseEditor({
     setView(next);
   }
 
-  function applyDraft(draft: Draft) {
+  function applyDraft(draft: EditorFields) {
     setDraftToReview(null);
-    setDescription(draft.description || "");
-    setPrice(inputPrice(draft.amount));
-    setDate(draft.date || localDate());
-    setCategory(draft.category || "");
-    setDraftReady(true);
+    setDescription(draft.description);
+    setPrice(draft.price);
+    setDate(draft.date);
+    setCategory(draft.category);
+    setAppliedDraft(draft);
     show("manual");
   }
 
   function reviewDraft(draft: Draft) {
-    if (changed) setDraftToReview(draft);
-    else applyDraft(draft);
+    const proposed = {
+      description: draft.description || "",
+      price: inputPrice(draft.amount),
+      date: draft.date || localDate(),
+      category: draft.category || "",
+    };
+    if (changed) setDraftToReview(proposed);
+    else applyDraft(proposed);
   }
 
   function requestClose() {
@@ -341,7 +377,12 @@ export function ExpenseEditor({
               {!saving && <Icon name="check" />}
             </button>
             {draftReady ? (
-              <button type="button" className="text" disabled={saving} onClick={() => done()}>
+              <button
+                type="button"
+                className="text"
+                disabled={saving}
+                onClick={() => changed ? requestClose() : done()}
+              >
                 Descartar rascunho
               </button>
             ) : !expense && (
@@ -368,7 +409,7 @@ export function ExpenseEditor({
           dismissConfirmation();
         }}
       >
-        <h2 id="editor-confirmation-title">
+        <h2 id="editor-confirmation-title" ref={confirmationTitle} tabIndex={-1}>
           {confirmClose
             ? draftReady ? "Descartar rascunho?" : "Descartar preenchimento?"
             : "Usar o rascunho da gravação?"}
@@ -376,8 +417,28 @@ export function ExpenseEditor({
         <p id="editor-confirmation-description">
           {confirmClose
             ? "O que está neste formulário será descartado."
-            : "O rascunho substituirá os campos que você já preencheu."}
+            : "Ao usar o rascunho, estes serão os novos valores do formulário."}
         </p>
+        {!confirmClose && comparison && (
+          <table className="editor-comparison" aria-label="Comparação dos campos">
+            <thead>
+              <tr>
+                <th scope="col">Campo</th>
+                <th scope="col" aria-label="Preenchimento atual">Atual</th>
+                <th scope="col">Rascunho de voz</th>
+              </tr>
+            </thead>
+            <tbody>
+              {comparison.map(([field, current, proposed]) => (
+                <tr key={field}>
+                  <th scope="row">{field}</th>
+                  <td>{current || "Em branco"}</td>
+                  <td>{proposed || "Em branco"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
         <div className="editor-actions">
           <button
             type="button"

@@ -57,6 +57,13 @@ export function Breakdown({
         <h2 id={title}>Por categoria</h2>
         <span className="dashboard-mark" aria-hidden="true"><Icon name="chart" /></span>
       </div>
+      {groups.length > 0 && (
+        <p className="breakdown-hint">
+          {opensHistory
+            ? "Escolha uma categoria para abrir o Histórico filtrado."
+            : "Escolha uma categoria para filtrar os gastos recentes."}
+        </p>
+      )}
       {groups.length ? (
         <div className={showDonut ? "breakdown-content with-donut" : "breakdown-content"}>
           {showDonut && (
@@ -74,13 +81,17 @@ export function Breakdown({
               const share = value / total;
               const amount = money(value);
               const shareLabel = share < 0.001 ? "< 0,1%" : percent.format(share);
+              const active = selected === category;
+              const action = opensHistory
+                ? `Ver gastos de ${category} no histórico`
+                : `Filtrar gastos recentes por ${category}`;
               return (
                 <li key={category}>
                   <button
                     type="button"
                     className="legend-item"
-                    aria-label={opensHistory ? `Ver gastos de ${category} no histórico, ${amount}, ${shareLabel}` : undefined}
-                    aria-pressed={opensHistory ? undefined : selected === category}
+                    aria-label={`${action}, ${amount}, ${shareLabel}`}
+                    aria-pressed={opensHistory ? undefined : active}
                     onClick={() => onSelect(category)}
                     style={{ "--category-color": categoryColor(category) } as CSSProperties}
                   >
@@ -95,6 +106,7 @@ export function Breakdown({
                       </span>
                       {opensHistory && <Icon name="chevronRight" size={14} className="legend-next" />}
                     </span>
+                    {active && <span className="legend-feedback">Gastos recentes filtrados</span>}
                     {!showDonut && (
                       <span className="bar-track" aria-hidden="true">
                         <span

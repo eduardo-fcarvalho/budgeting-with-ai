@@ -218,6 +218,7 @@ function Book({ diary }: { diary: Diary }) {
   const groups = totals(rows);
   const total = groups.reduce((sum, [, value]) => sum + value, 0);
   const ready = Boolean(data);
+  const firstExpense = ready && expenses.length === 0;
   const controls = {
     period,
     date,
@@ -270,15 +271,26 @@ function Book({ diary }: { diary: Diary }) {
                 {overview}
                 <section className="voice-card" aria-labelledby="voice-card-title">
                   <div className="voice-card-copy">
-                    <h2 id="voice-card-title">Registre por voz</h2>
+                    <h2 id="voice-card-title">
+                      {firstExpense ? "Registre seu primeiro gasto" : "Registre por voz"}
+                    </h2>
                     <p>Dite o gasto e revise o rascunho preparado pela IA.</p>
-                    <button className="primary" type="button" disabled={!online || busy} onClick={() => openEditor("voice")}>
-                      <Icon name="mic" /> Registrar por voz
-                    </button>
+                    <div className="voice-card-actions">
+                      {firstExpense && (
+                        <button className="primary" type="button" disabled={!online || busy} onClick={() => openEditor("manual")}>
+                          <Icon name="keyboard" /> Preencher manualmente
+                        </button>
+                      )}
+                      <button className={firstExpense ? "secondary" : "primary"} type="button" disabled={!online || busy} onClick={() => openEditor("voice")}>
+                        <Icon name="mic" /> Registrar por voz
+                      </button>
+                    </div>
                   </div>
-                  <div className="voice-card-orb" aria-hidden="true">
-                    <Icon name="mic" size={37} />
-                  </div>
+                  {!firstExpense && (
+                    <div className="voice-card-orb" aria-hidden="true">
+                      <Icon name="mic" size={37} />
+                    </div>
+                  )}
                 </section>
                 <Breakdown
                   groups={groups}
