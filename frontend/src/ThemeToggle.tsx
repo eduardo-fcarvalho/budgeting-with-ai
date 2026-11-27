@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Icon } from "./Icon";
 
 type Theme = "light" | "dark";
 
@@ -57,7 +58,7 @@ export function ThemeToggle() {
       title={dark ? "Ativar tema claro" : "Ativar tema escuro"}
       onClick={toggle}
     >
-      <span aria-hidden="true">{dark ? "☀︎" : "☾"}</span>
+      <Icon name={dark ? "sun" : "moon"} />
     </button>
   );
 }

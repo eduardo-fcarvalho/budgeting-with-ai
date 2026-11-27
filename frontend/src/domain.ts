@@ -23,10 +23,14 @@ export const money = (amount: number) =>
   });
 
 export function cents(value: string): number | null {
-  const parts = /^(\d{1,9})(?:[,.](\d{1,2}))?$/.exec(value.trim());
+  const amount = value.trim().replace(/^R\$\s*/, "");
+  const parts =
+    /^(\d{1,9})(?:[,.](\d{1,2}))?$/.exec(amount) ??
+    /^(\d{1,3}(?:\.\d{3}){1,2})(?:,(\d{1,2}))?$/.exec(amount);
   if (!parts) return null;
   const result =
-    Number(parts[1]) * 100 + Number((parts[2] || "").padEnd(2, "0"));
+    Number(parts[1].replace(/\./g, "")) * 100 +
+    Number((parts[2] || "").padEnd(2, "0"));
   return result > 0 && Number.isSafeInteger(result) ? result : null;
 }
 

@@ -119,6 +119,8 @@ test("consulta offline e logout eliminam o histórico em todas as abas", async (
   const bounds = await add.boundingBox();
   expect(bounds.x + bounds.width / 2).toBeCloseTo(page.viewportSize().width / 2, 0);
   await add.click();
+  await page.getByRole("dialog", { name: "Novo gasto" })
+    .getByRole("button", { name: "Preencher manualmente" }).click();
   await expect(page.getByLabel("Valor (R$)", { exact: true })).toBeFocused();
   await page.getByLabel("Descrição").fill("Almoço de teste");
   await page.getByLabel("Valor (R$)", { exact: true }).fill("42,90");
@@ -148,6 +150,16 @@ test("consulta offline e logout eliminam o histórico em todas as abas", async (
     page.getByRole("heading", { name: "Almoço de teste" }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Novo gasto" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Registrar por voz" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Editar" })).toHaveCount(0);
+  const cachedPaths = await page.evaluate(async () => {
+    const entries = await Promise.all((await caches.keys()).map(async (key) =>
+      (await (await caches.open(key)).keys()).map((request) => new URL(request.url).pathname)
+    ));
+    return entries.flat();
+  });
+  expect(cachedPaths.some((path) => path.startsWith("/api/"))).toBe(false);
+  await page.getByRole("button", { name: "Ajustes" }).click();
   await page.getByRole("button", { name: "Sair" }).click();
   await expect(page.getByLabel("E-mail")).toBeVisible();
   await expect(second.getByLabel("E-mail")).toBeVisible();
@@ -182,7 +194,10 @@ test("voz abre rascunho editável e descartar mantém o histórico intacto", asy
   await context.grantPermissions(["microphone"], { origin: url });
   await page.goto(url);
   await login(page, "voz@example.test");
+  let requests = 0;
+  page.on("request", (request) => { if (request.url() === url + "/api/drafts") requests++; });
   await page.getByRole("button", { name: "Novo gasto" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Registrar por voz" }).click();
   await page.getByRole("button", { name: "Gravar gasto" }).click();
   const stop = page.getByRole("button", { name: "Parar e interpretar" });
   await expect(stop).toBeEnabled();
@@ -196,7 +211,19 @@ test("voz abre rascunho editável e descartar mantém o histórico intacto", asy
   await expect(page.getByLabel("Categoria", { exact: true })).toHaveValue(
     "Café",
   );
-  await page.getByRole("button", { name: "Fechar", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Revisar rascunho" })).toBeFocused();
+  await page.getByLabel("Descrição").fill("Descrição revisada");
+  const discard = page.getByRole("button", { name: "Descartar rascunho", exact: true });
+  const confirmation = page.getByRole("dialog", { name: "Descartar rascunho?" });
+  await discard.click();
+  const keepEditing = confirmation.getByRole("button", { name: "Continuar editando" });
+  await expect(keepEditing).toBeFocused();
+  await keepEditing.click();
+  await expect(page.getByLabel("Descrição")).toHaveValue("Descrição revisada");
+  await expect(discard).toBeFocused();
+  await discard.click();
+  await confirmation.getByRole("button", { name: "Descartar e fechar" }).click();
+  expect(requests).toBe(1);
   expect(profiles.get(account).size).toBe(0);
   await expect(
     page.getByText("Nenhum gasto em", { exact: false }),
@@ -232,10 +259,7 @@ test("atalho do manifesto abre a voz e preserva a alternativa de um toque", asyn
   await expect(start).toBeDisabled();
 });
 
-test("atalho da PWA em primeiro plano usa o microfone já autorizado", async ({
-  page,
-  context,
-}) => {
+test("atalho instalado abre a voz sem capturar até o toque explícito", async ({ page, context }) => {
   account = null;
   let audioRequests = 0;
   page.on("request", (request) => {
@@ -246,30 +270,24 @@ test("atalho da PWA em primeiro plano usa o microfone já autorizado", async ({
     const original = window.matchMedia.bind(window);
     window.matchMedia = (query) =>
       query === "(display-mode: standalone)" ? { matches: true } : original(query);
+    const capture = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    window.captureStarts = 0;
+    navigator.mediaDevices.getUserMedia = (...args) => {
+      window.captureStarts++;
+      return capture(...args);
+    };
   });
-  await page.goto(url);
+  await page.goto(url + "/?acao=gravar");
   await login(page, "instalado@example.test");
-  await expect(page.getByRole("button", { name: "Novo gasto" })).toBeEnabled();
-  const stop = page.getByRole("button", { name: "Parar e interpretar" });
   const start = page.getByRole("button", { name: "Gravar gasto", exact: true });
-  await page.goto(url + "/?acao=gravar");
+  const stop = page.getByRole("button", { name: "Parar e interpretar" });
+  await expect(start).toBeFocused();
+  expect(await page.evaluate(() => window.captureStarts)).toBe(0);
+  await start.click();
   await expect(stop).toBeEnabled();
+  expect(await page.evaluate(() => window.captureStarts)).toBe(1);
   await page.getByRole("button", { name: "Cancelar gravação" }).click();
-  await expect(start).toBeEnabled();
-
-  await page.clock.install();
-  await page.goto(url + "/?acao=gravar");
-  await expect(stop).toBeEnabled();
-  await page.clock.fastForward(30_001);
-  await expect(start).toBeEnabled();
-
-  await page.goto(url + "/?acao=gravar");
-  await expect(stop).toBeEnabled();
-  await page.evaluate(() => {
-    Object.defineProperty(document, "hidden", { value: true });
-    document.dispatchEvent(new Event("visibilitychange"));
-  });
-  await expect(start).toBeEnabled();
+  await expect(start).toBeFocused();
   expect(audioRequests).toBe(0);
   expect(profiles.get(account).size).toBe(0);
 });
@@ -323,12 +341,25 @@ test("totais por categoria acompanham o período e filtram o histórico", async 
   await expect(food).toContainText("63,6%");
   await expect(market).toContainText("30,00");
 
+  await page.setViewportSize({ width: 320, height: 700 });
   await food.click();
+  await expect(food).toHaveAccessibleName(/Filtrar gastos recentes por Alimentação/);
   await expect(food).toHaveAttribute("aria-pressed", "true");
+  const filtered = categories.getByRole("button", { name: "Ver gastos filtrados" });
+  await expect(filtered).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+  await filtered.focus();
+  await page.keyboard.press("Enter");
+  const recentTitle = page.getByRole("heading", { name: "Gastos recentes" });
+  await expect(recentTitle).toBeFocused();
+  await expect(recentTitle).toBeInViewport();
+  await expect(page).toHaveURL(url + "/");
   await expect(lunch).toBeVisible();
   await expect(coffee).toBeVisible();
   await expect(bus).toHaveCount(0);
   await page.getByRole("button", { name: "Limpar filtro" }).click();
+  await expect(food).toHaveAttribute("aria-pressed", "false");
+  await expect(filtered).toHaveCount(0);
   await expect(bus).toBeVisible();
   await page.getByRole("button", { name: "Mensal", exact: true }).click();
   await page.getByLabel("Selecionar mês").fill("2026-01");
@@ -358,11 +389,12 @@ test("tema segue o sistema e lembra a escolha no diário e no login", async ({
   await toggle.click();
   await login(page, "tema@example.test");
   await expect(page.getByRole("heading", { name: "Meus gastos" })).toBeVisible();
+  await page.getByRole("button", { name: "Ajustes" }).click();
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
   await expect(root).toHaveCSS("color-scheme", "dark");
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Meus gastos" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ajustes" })).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Sair", exact: true }).click();
   await expect(page.getByLabel("E-mail")).toBeVisible();
@@ -405,4 +437,343 @@ test("recarregar recebe a nova versão mesmo com outra aba aberta", async ({
   } finally {
     shellRevision = "";
   }
+});
+
+test("navegação responsiva, foco do editor e movimento reduzido", async ({ page }) => {
+  account = null;
+  const email = "navegacao@example.test";
+  const date = "2026-03-15";
+  const names = ["Mercado", "Transporte", "Casa", "Lazer", "Café", "Oficina"];
+  profiles.set(email, new Map(names.map((category, index) => {
+    const id = String(index);
+    return [id, { id, category, date, amount: 1500 + index, description: `Gasto de ${category}` }];
+  })));
+  await page.clock.setFixedTime(new Date(2026, 2, 15, 12));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(url);
+  await login(page, email);
+  const nav = page.getByRole("navigation", { name: "Navegação principal" });
+  const add = nav.getByRole("button", { name: "Novo gasto" });
+  await expect(add).toBeEnabled();
+  await expect(page.locator(".category-donut")).toHaveCount(0);
+  await expect(page.locator(".bar-value")).toHaveCount(6);
+  for (const width of [320, 375, 390, 430, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 852 });
+    const bounds = await add.boundingBox();
+    expect(bounds.width).toBeGreaterThanOrEqual(44);
+    expect(bounds.height).toBeGreaterThanOrEqual(44);
+    if (width < 1024) expect(bounds.x + bounds.width / 2).toBeCloseTo(width / 2, 0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+  }
+  await page.setViewportSize({ width: 390, height: 852 });
+  await nav.getByRole("button", { name: "Análises" }).click();
+  await expect(nav.getByRole("button", { name: "Análises" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("main")).toBeFocused();
+  await expect(page).toHaveURL(/#analises$/);
+  const duration = await page.locator(".screen-content").evaluate((element) =>
+    parseFloat(getComputedStyle(element).animationDuration)
+  );
+  expect(duration).toBeLessThan(0.001);
+  const marketCategory = page.getByRole("button", { name: /Ver gastos de Mercado no histórico/ });
+  await marketCategory.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/#historico$/);
+  await expect(page.getByRole("main")).toBeFocused();
+  await expect(page.getByRole("button", { name: "Limpar filtro" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Gasto de Mercado" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Gasto de Casa" })).toHaveCount(0);
+  await nav.getByRole("button", { name: "Início" }).click();
+  await expect(page.getByRole("heading", { name: "Gasto de Casa" })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("button", { name: "Limpar filtro" })).toBeVisible();
+  await page.getByRole("button", { name: "Mês anterior" }).click();
+  await expect(page.getByRole("button", { name: "Limpar filtro" })).toHaveCount(0);
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Análises" })).toBeVisible();
+
+  await add.click();
+  await page.getByRole("dialog", { name: "Novo gasto" })
+    .getByRole("button", { name: "Preencher manualmente" }).click();
+  const dialog = page.getByRole("dialog", { name: "Novo gasto" });
+  const price = dialog.getByLabel("Valor (R$)", { exact: true });
+  await expect(price).toBeFocused();
+  await page.setViewportSize({ width: 390, height: 430 });
+  expect(await dialog.evaluate((element) => element.getBoundingClientRect().bottom)).toBeLessThanOrEqual(430);
+  await dialog.getByRole("button", { name: "Confirmar gasto" }).click();
+  await expect(price).toHaveAttribute("aria-invalid", "true");
+  await expect(dialog.getByRole("alert")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(add).toBeFocused();
+});
+
+test("exclusão mantém confirmação e não remove se cancelada", async ({ page }) => {
+  account = null;
+  const email = "exclusao@example.test";
+  const expense = { id: "excluir", category: "Casa", date: "2026-03-15", amount: 1500, description: "Gasto a excluir" };
+  profiles.set(email, new Map([[expense.id, expense]]));
+  await page.clock.setFixedTime(new Date(2026, 2, 15, 12));
+  await page.goto(url);
+  await login(page, email);
+  const remove = page.getByRole("button", { name: "Excluir", exact: true });
+  await remove.click();
+  await expect(page.getByText("Excluir este gasto?")).toBeVisible();
+  await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await expect(remove).toBeFocused();
+  expect(profiles.get(email).size).toBe(1);
+  await remove.click();
+  await page.getByRole("button", { name: "Sim, excluir" }).click();
+  await expect(page.getByText("Gasto excluído.")).toBeVisible();
+  expect(profiles.get(email).size).toBe(0);
+});
+
+test("limite de voz gera um rascunho que só é salvo ao confirmar", async ({ page, context }) => {
+  account = null;
+  const email = "voz-limite@example.test";
+  await context.grantPermissions(["microphone"], { origin: url });
+  await page.clock.install({ time: new Date(2026, 2, 15, 12) });
+  await page.goto(url);
+  await login(page, email);
+  let requests = 0;
+  page.on("request", (request) => {
+    if (request.url() === url + "/api/drafts") requests++;
+  });
+  await page.getByRole("button", { name: "Registrar por voz" }).click();
+  await page.getByRole("button", { name: "Gravar gasto" }).click();
+  const stop = page.getByRole("button", { name: "Parar e interpretar" });
+  await expect(stop).toBeEnabled();
+  // Let the fake microphone deliver audio before moving the browser clock.
+  await page.waitForTimeout(450);
+  await page.clock.fastForward(30_001);
+  await expect(page.getByRole("heading", { name: "Revisar rascunho" })).toBeFocused();
+  expect(requests).toBe(1);
+  expect(profiles.get(email).size).toBe(0);
+  await page.getByLabel("Descrição").fill("Gasto de voz revisado");
+  await page.getByRole("button", { name: "Confirmar gasto" }).click();
+  await expect(page.getByRole("heading", { name: "Gasto de voz revisado" })).toBeVisible();
+  expect([...profiles.get(email).values()]).toMatchObject([
+    { description: "Gasto de voz revisado", amount: 4290, category: "Café" },
+  ]);
+  expect(requests).toBe(1);
+});
+
+test("protege o preenchimento ao fechar e aceita moeda copiada", async ({ page }) => {
+  account = null;
+  const email = "preenchimento@example.test";
+  await page.goto(url);
+  await login(page, email);
+  const add = page.getByRole("button", { name: "Novo gasto" });
+  await add.click();
+  await page.getByRole("dialog", { name: "Novo gasto" })
+    .getByRole("button", { name: "Preencher manualmente" }).click();
+  const editor = page.getByRole("dialog", { name: "Novo gasto" });
+  const description = editor.getByLabel("Descrição");
+  const price = editor.getByLabel("Valor (R$)", { exact: true });
+  await description.fill("Gasto fictício");
+  await price.fill("R$\u00a01.234,56");
+  await editor.getByLabel("Categoria", { exact: true }).fill("Casa");
+
+  await page.keyboard.press("Escape");
+  const confirm = page.getByRole("dialog", { name: "Descartar preenchimento?" });
+  const keepEditing = confirm.getByRole("button", { name: "Continuar editando" });
+  await expect(keepEditing).toBeFocused();
+  await keepEditing.click();
+  await expect(price).toHaveValue("R$\u00a01.234,56");
+  await expect(description).toHaveValue("Gasto fictício");
+  await expect(editor.getByLabel("Categoria", { exact: true })).toHaveValue("Casa");
+
+  await editor.getByRole("button", { name: "Fechar", exact: true }).click();
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole("button", { name: "Descartar e fechar" }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(add).toBeFocused();
+  expect(profiles.get(email).size).toBe(0);
+
+  await add.click();
+  await page.getByRole("dialog", { name: "Novo gasto" })
+    .getByRole("button", { name: "Preencher manualmente" }).click();
+  await expect(price).toHaveValue("");
+  await price.fill("R$\u00a01.234,56");
+  await description.fill("Gasto fictício");
+  await editor.getByLabel("Categoria", { exact: true }).fill("Casa");
+  await editor.getByRole("button", { name: "Confirmar gasto" }).click();
+  await expect(page.getByRole("heading", { name: "Gasto fictício" })).toBeVisible();
+  expect([...profiles.get(email).values()][0].amount).toBe(123456);
+});
+
+test("o rascunho de voz só substitui o preenchimento se escolhido", async ({ page, context }) => {
+  account = null;
+  const email = "substituicao@example.test";
+  await page.setViewportSize({ width: 320, height: 700 });
+  await context.grantPermissions(["microphone"], { origin: url });
+  await page.goto(url);
+  await login(page, email);
+  let drafts = 0;
+  page.on("request", (request) => {
+    if (request.url() === url + "/api/drafts") drafts++;
+  });
+  await page.getByRole("button", { name: "Novo gasto" }).click();
+  await page.getByRole("dialog", { name: "Novo gasto" })
+    .getByRole("button", { name: "Preencher manualmente" }).click();
+  const price = page.getByLabel("Valor (R$)", { exact: true });
+  await price.fill("21,90");
+  await page.getByLabel("Descrição").fill("Preenchimento inicial");
+
+  const recordDraft = async () => {
+    await page.getByRole("dialog", { name: "Novo gasto" })
+      .getByRole("button", { name: "Registrar por voz" }).click();
+    await page.getByRole("button", { name: "Gravar gasto" }).click();
+    const stop = page.getByRole("button", { name: "Parar e interpretar" });
+    await expect(stop).toBeEnabled();
+    // Allow the fake recording device to supply audio frames before stopping.
+    await page.waitForTimeout(450);
+    await stop.click();
+  };
+  const decision = page.getByRole("dialog", { name: "Usar o rascunho da gravação?" });
+
+  await recordDraft();
+  const comparison = decision.getByRole("table", { name: "Comparação dos campos" });
+  await expect(comparison.getByRole("columnheader", { name: "Preenchimento atual" })).toBeVisible();
+  await expect(comparison.getByRole("columnheader", { name: "Rascunho de voz" })).toBeVisible();
+  await expect(comparison.getByRole("row", { name: /Valor/ })).toContainText(/21,90.*42,90/);
+  await expect(comparison.getByRole("row", { name: /Data/ })).toContainText("15/03/2026");
+  await expect(comparison.getByRole("row", { name: /Descrição/ })).toContainText("Preenchimento inicial");
+  await expect(comparison.getByRole("row", { name: /Descrição/ })).toContainText("Gasto por voz");
+  await expect(comparison.getByRole("row", { name: /Categoria/ })).toContainText("Café");
+  await expect(decision.getByRole("heading")).toBeFocused();
+  expect(await decision.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  const keep = decision.getByRole("button", { name: "Manter meu preenchimento" });
+  await page.keyboard.press("Tab");
+  await expect(keep).toBeFocused();
+  await keep.click();
+  await expect(price).toHaveValue("21,90");
+  await expect(page.getByLabel("Descrição")).toHaveValue("Preenchimento inicial");
+
+  await recordDraft();
+  await decision.getByRole("button", { name: "Usar rascunho" }).click();
+  await expect(page.getByRole("heading", { name: "Revisar rascunho" })).toBeFocused();
+  await expect(price).toHaveValue("42,90");
+  expect(drafts).toBe(2);
+  expect(profiles.get(email).size).toBe(0);
+  await page.getByRole("button", { name: "Descartar rascunho", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("compara o mês corrente por dias equivalentes e ignora meses futuros", async ({ page }) => {
+  account = null;
+  const email = "comparacao@example.test";
+  const fixtures = [
+    ["2026-02-01", 1000],
+    ["2026-02-28", 2000],
+    ["2026-03-28", 5000],
+    ["2026-03-29", 7000],
+    ["2026-04-01", 500],
+  ];
+  profiles.set(email, new Map(fixtures.map(([date, amount]) => [
+    date, { id: date, date, description: "Gasto de teste", amount, category: "Casa" },
+  ])));
+  await page.clock.setFixedTime(new Date(2026, 2, 30, 12));
+  await page.goto(url);
+  await login(page, email);
+  const comparison = page.locator(".previous-total");
+  await expect(page.locator(".summary > strong")).toContainText("120,00");
+  await expect(comparison).toContainText("Até o dia 28");
+  await expect(comparison).toContainText("20,00");
+  await page.getByRole("button", { name: "Próximo mês" }).click();
+  await expect(page.locator(".summary > strong")).toContainText("5,00");
+  await expect(comparison).toHaveCount(0);
+});
+
+test("busca no histórico ignora acentos e mantém o texto original", async ({ page }) => {
+  account = null;
+  const email = "busca@example.test";
+  profiles.set(email, new Map([
+    ["1", { id: "1", date: "2026-03-15", description: "Passagem de ônibus", amount: 600, category: "Transporte" }],
+    ["2", { id: "2", date: "2026-03-15", description: "Encomenda", amount: 2000, category: "Decoração" }],
+  ]));
+  await page.clock.setFixedTime(new Date(2026, 2, 15, 12));
+  await page.goto(url + "/#historico");
+  await login(page, email);
+  const search = page.getByRole("searchbox", { name: "Buscar no histórico" });
+  for (const query of ["onibus", "ônibus", " ONIBUS "]) {
+    await search.fill(query);
+    await expect(page.getByRole("heading", { name: "Passagem de ônibus" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Encomenda" })).toHaveCount(0);
+  }
+  await search.fill("decoracao");
+  await expect(page.getByRole("heading", { name: "Encomenda" })).toBeVisible();
+  await expect(page.getByText("Decoração", { exact: true })).toBeVisible();
+});
+
+test("o primeiro gasto pode ser preenchido direto no Início", async ({ page }) => {
+  account = null;
+  const email = "primeiro-gasto@example.test";
+  await page.clock.setFixedTime(new Date(2026, 2, 15, 12));
+  await page.goto(url);
+  await login(page, email);
+  const manual = page.getByRole("main").getByRole("button", { name: "Preencher manualmente" });
+  await expect(manual).toBeEnabled();
+  await manual.click();
+  const editor = page.getByRole("dialog", { name: "Novo gasto" });
+  const price = editor.getByLabel("Valor (R$)", { exact: true });
+  await expect(price).toBeFocused();
+  await price.fill("15,00");
+  await editor.getByLabel("Descrição").fill("Gasto fictício do mês passado");
+  await editor.getByLabel("Data", { exact: true }).fill("2026-02-28");
+  await editor.getByLabel("Categoria", { exact: true }).fill("Casa");
+  await editor.getByRole("button", { name: "Confirmar gasto" }).click();
+  await expect(page.getByText("Gasto confirmado para 28 de fevereiro de 2026.")).toBeVisible();
+  await expect(manual).toHaveCount(0);
+  await expect(page.getByText("Sem gastos neste período.")).toBeVisible();
+  await page.getByRole("button", { name: "Ver no Histórico" }).click();
+  await expect(page).toHaveURL(/#historico$/);
+  await expect(page.getByRole("heading", { name: "Gasto fictício do mês passado" })).toBeVisible();
+
+  const search = page.getByRole("searchbox", { name: "Buscar no histórico" });
+  await search.fill("sem resultado");
+  await page.getByRole("button", { name: "Novo gasto" }).click();
+  await page.getByRole("dialog", { name: "Novo gasto" })
+    .getByRole("button", { name: "Preencher manualmente" }).click();
+  await price.fill("18,00");
+  await editor.getByLabel("Descrição").fill("Gasto fictício de outro dia");
+  await editor.getByLabel("Categoria", { exact: true }).fill("Casa");
+  await editor.getByRole("button", { name: "Confirmar gasto" }).click();
+  await page.getByRole("button", { name: "Ver no Histórico" }).click();
+  await expect(search).toHaveValue("");
+  await expect(page.getByRole("heading", { name: "Gasto fictício de outro dia" })).toBeVisible();
+});
+
+test("falha temporária no salvamento mantém campos e devolve o foco à tentativa", async ({ page }) => {
+  account = null;
+  const email = "repetir-salvamento@example.test";
+  const requests = [];
+  await page.route(url + "/api/expenses", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    requests.push(route.request().postDataJSON());
+    if (requests.length === 1) return route.fulfill({ status: 503, json: {} });
+    return route.continue();
+  });
+  await page.goto(url);
+  await login(page, email);
+  await page.getByRole("main").getByRole("button", { name: "Preencher manualmente" }).click();
+  const editor = page.getByRole("dialog", { name: "Novo gasto" });
+  const price = editor.getByLabel("Valor (R$)", { exact: true });
+  await price.fill("21,90");
+  await editor.getByLabel("Descrição").fill("Gasto fictício");
+  await editor.getByLabel("Categoria", { exact: true }).fill("Casa");
+  const save = editor.getByRole("button", { name: /Confirmar gasto|Tentar novamente/ });
+  await save.click();
+
+  const error = editor.getByRole("alert");
+  await expect(error).toContainText(/salvar|salvamento/i);
+  await expect(error).toContainText(/mantid|preservad/i);
+  await expect(error).not.toContainText("Você pode digitar");
+  await expect(price).toHaveValue("21,90");
+  await expect(save).toBeFocused();
+  expect(profiles.get(email).size).toBe(0);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "Gasto fictício" })).toBeVisible();
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toEqual(requests[0]);
+  expect(profiles.get(email).size).toBe(1);
 });

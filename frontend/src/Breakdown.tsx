@@ -1,5 +1,6 @@
-import type { CSSProperties } from "react";
+import { useId, type CSSProperties } from "react";
 import { money } from "./domain";
+import { Icon } from "./Icon";
 
 const percent = new Intl.NumberFormat("pt-BR", {
   style: "percent",
@@ -12,7 +13,7 @@ export function categoryColor(category: string) {
     hash = Math.imul(hash ^ letter.codePointAt(0)!, 16777619);
   }
   const color = hash >>> 0;
-  return `hsl(${color % 360} 58% ${42 + ((color >>> 16) % 3) * 8}%)`;
+  return `hsl(${color % 360} 63% ${48 + ((color >>> 16) % 3) * 6}%)`;
 }
 
 export function CategoryDot({ category }: { category: string }) {
@@ -30,61 +31,107 @@ export function Breakdown({
   total,
   selected,
   onSelect,
+  onViewFiltered,
   ready,
 }: {
   groups: [string, number][];
   total: number;
-  selected: string | null;
-  onSelect: (category: string | null) => void;
+  selected?: string | null;
+  onSelect: (category: string) => void;
+  onViewFiltered?: () => void;
   ready: boolean;
 }) {
+  const title = useId();
+  const opensHistory = selected === undefined;
+  const showDonut = total > 0 && groups.length <= 5;
+  let cumulative = 0;
+  const segments = showDonut
+    ? groups.map(([category, value]) => {
+      const start = cumulative;
+      cumulative += value;
+      return `${categoryColor(category)} ${start / total * 100}% ${cumulative / total * 100}%`;
+    }).join(", ")
+    : "";
+
   return (
-    <section className="breakdown" aria-labelledby="category-title">
-      <div className="heading">
-        <h2 id="category-title">Por categoria</h2>
+    <section className="breakdown" aria-labelledby={title}>
+      <div className="dashboard-card-heading">
+        <h2 id={title}>Por categoria</h2>
+        <span className="dashboard-mark" aria-hidden="true"><Icon name="chart" /></span>
       </div>
-      {groups.length ? (
-        <ul className="legend" aria-label="Participação por categoria">
-          {groups.map(([category, value]) => {
-            const share = value / total;
-            return (
-              <li key={category}>
-                <button
-                  type="button"
-                  className="legend-item"
-                  aria-pressed={selected === category}
-                  onClick={() =>
-                    onSelect(selected === category ? null : category)
-                  }
-                  style={{
-                    "--category-color": categoryColor(category),
-                  } as CSSProperties}
-                >
-                  <span className="legend-details">
-                    <span className="legend-category">
-                      <CategoryDot category={category} />
-                      {category}
-                    </span>
-                    <span className="legend-amount">
-                      <b>{money(value)}</b>
-                      <span>{share < 0.001 ? "< 0,1%" : percent.format(share)}</span>
-                    </span>
-                  </span>
-                  <span className="bar-track" aria-hidden="true">
-                    <span
-                      className="bar-value"
-                      style={{ width: `${share * 100}%` }}
-                    />
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <p className="breakdown-empty">
-          {ready ? "Sem gastos neste período." : "Aguardando histórico."}
+      {groups.length > 0 && (
+        <p className="breakdown-hint">
+          {opensHistory
+            ? "Escolha uma categoria para abrir o Histórico filtrado."
+            : "Escolha uma categoria para filtrar os gastos recentes."}
         </p>
+      )}
+      {groups.length ? (
+        <div className={showDonut ? "breakdown-content with-donut" : "breakdown-content"}>
+          {showDonut && (
+            <div
+              key={segments}
+              className="category-donut"
+              style={{ backgroundImage: `conic-gradient(${segments})` }}
+              aria-hidden="true"
+            >
+              <span><b>{groups.length}</b>{groups.length === 1 ? "categoria" : "categorias"}</span>
+            </div>
+          )}
+          <ul className="legend" aria-label="Participação por categoria">
+            {groups.map(([category, value]) => {
+              const share = value / total;
+              const amount = money(value);
+              const shareLabel = share < 0.001 ? "< 0,1%" : percent.format(share);
+              const active = selected === category;
+              const action = opensHistory
+                ? `Ver gastos de ${category} no histórico`
+                : `Filtrar gastos recentes por ${category}`;
+              return (
+                <li key={category}>
+                  <button
+                    type="button"
+                    className="legend-item"
+                    aria-label={`${action}, ${amount}, ${shareLabel}`}
+                    aria-pressed={opensHistory ? undefined : active}
+                    onClick={() => onSelect(category)}
+                    style={{ "--category-color": categoryColor(category) } as CSSProperties}
+                  >
+                    <span className="legend-details">
+                      <span className="legend-category">
+                        <CategoryDot category={category} />
+                        <span>{category}</span>
+                      </span>
+                      <span className="legend-amount">
+                        <b>{amount}</b>
+                        <span>{shareLabel}</span>
+                      </span>
+                      {opensHistory && <Icon name="chevronRight" size={14} className="legend-next" />}
+                    </span>
+                    {!showDonut && (
+                      <span className="bar-track" aria-hidden="true">
+                        <span
+                          className="bar-value"
+                          style={{ "--share": share } as CSSProperties}
+                        />
+                      </span>
+                    )}
+                  </button>
+                  {active && onViewFiltered && (
+                    <button type="button" className="text legend-action" onClick={onViewFiltered}>
+                      Ver gastos filtrados
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : (
+        <div className="dashboard-empty">
+          <span className="dashboard-mark" aria-hidden="true"><Icon name="chart" /></span>
+          <p>{ready ? "Sem gastos neste período." : "Aguardando histórico."}</p>
+        </div>
       )}
     </section>
   );

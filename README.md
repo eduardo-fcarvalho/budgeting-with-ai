@@ -2,10 +2,11 @@
 
 Diário pessoal de gastos em reais, com conferência de lançamentos ditados e consulta offline no celular.
 
-O piloto foi mesclado e está em avaliação local. A aprovação do frontend por Eduardo vem antes da publicação.
+O piloto está em avaliação local. Eduardo aprovou o visual do redesenho do Diário de gastos.
+A validação nos dois celulares e a decisão de publicação seguem pendentes.
 Consulte o [registro do piloto](docs/versoes/piloto.md) e o [briefing](docs/briefing.md).
 
-No celular, **Novo gasto** abre o formulário manual. O painel mostra os totais por categoria pessoal
+No celular, **Novo gasto** oferece registro manual e por voz. O painel mostra os totais por categoria pessoal
 no dia, semana, mês ou ano selecionado e permite filtrar o histórico. O tema pode ser claro ou escuro.
 
 ## Rodar o piloto

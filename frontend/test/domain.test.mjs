@@ -7,7 +7,14 @@ test("valores em centavos sem arredondar centavos extras", () => {
   assert.equal(cents("42,90"), 4290);
   assert.equal(cents("0,01"), 1);
   assert.equal(cents("21.2"), 2120);
-  for (const input of ["0", "-4", "3,004", "NaN", "", "1e4"])
+  assert.equal(cents("1.234,56"), 123456);
+  assert.equal(cents(" R$\u00a01.234,56 "), 123456);
+  assert.equal(cents("1.234"), 123400);
+  assert.equal(cents("999.999.999,99"), 99999999999);
+  for (const input of [
+    "0", "-4", "3,004", "NaN", "", "1e4",
+    "12.34,56", "1,234.56", "1.234,567", "1.000.000.000,00",
+  ])
     assert.equal(cents(input), null);
 });
 

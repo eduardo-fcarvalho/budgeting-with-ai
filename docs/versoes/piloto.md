@@ -1,7 +1,8 @@
 # Piloto
 
-Em 24 de novembro de 2026, os PRs de preparação e implementação foram mesclados. A versão
-da `main` está em prévia local para Eduardo avaliar o frontend antes de decidir sobre o deploy.
+Em 24 de novembro de 2026, os PRs de preparação e implementação foram mesclados.
+Eduardo aprovou o visual do [redesenho do diário](https://github.com/eduardo-fcarvalho/budgeting-with-ai/issues/7)
+na avaliação local. O uso da PWA nos dois celulares ainda precisa ser validado.
 [Preparação #2](https://github.com/eduardo-fcarvalho/budgeting-with-ai/pull/2) · [Piloto #4](https://github.com/eduardo-fcarvalho/budgeting-with-ai/pull/4) · [Card #3](https://github.com/eduardo-fcarvalho/budgeting-with-ai/issues/3)
 
 ## Entregue
@@ -35,7 +36,7 @@ da `main` está em prévia local para Eduardo avaliar o frontend antes de decidi
 
 ## Antes da publicação
 
-1. Eduardo testa a prévia, avalia o frontend e decide se a interface está pronta para ser publicada.
+1. Eduardo revisa o PR do redesenho e decide se a interface está pronta para ser publicada.
    O [README](../../README.md#rodar-o-piloto) registra como iniciar a aplicação localmente.
 2. Com a interface aprovada, escolher a hospedagem com endereço HTTPS incluído e configurar o PostgreSQL
    e o backup externo. Na publicação, confirmar a instalação e o uso da PWA nos dois celulares.
@@ -46,15 +47,15 @@ da `main` está em prévia local para Eduardo avaliar o frontend antes de decidi
 
 ## Interface e análise por categoria
 
-- O lançamento manual abre pelo botão central no celular. O formulário permite reutilizar uma
-  categoria pessoal ou digitar uma nova.
+- O botão central no celular oferece registro manual e por voz. O editor permite reutilizar
+  uma categoria pessoal ou digitar uma nova.
+  [Sistema visual do BG-07](../../design-system/budgeting-with-ai/MASTER.md)
 - O resumo começa no mês corrente. Os períodos diário, semanal, mensal e anual controlam os totais
   por categoria e o histórico. A semana começa na segunda-feira. Selecionar uma categoria no painel
   filtra o histórico.
 - O tema segue a preferência do sistema até que a pessoa escolha claro ou escuro. A escolha fica
   salva no aparelho.
 - Nas instalações que exibem atalhos no ícone da PWA, **Gravar gasto** abre a tela de voz.
-  A captura automática requer permissão já concedida e suporte do navegador. Quando o navegador
-  exige interação, o botão da tela inicia a captura. Pelo atalho, o áudio só é enviado ao tocar em
-  **Parar e interpretar**. Sair da tela ou atingir o limite de 30 segundos descarta a captura automática.
-  O rascunho segue para conferência antes da confirmação.
+  A captura começa ao tocar em **Gravar gasto**, inclusive quando a permissão já está
+  concedida. É possível cancelar a gravação antes do envio. O rascunho segue para
+  conferência antes da confirmação.
