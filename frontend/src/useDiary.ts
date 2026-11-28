@@ -62,14 +62,14 @@ export function useDiary() {
       await task(async () => {
         let active = current();
         if (!same(active, markerRef.current)) adopt(null);
-        if (active?.pending) await forgetSnapshot(active);
         let session: Session;
         try {
           session = await api<Session>("session");
         } catch (err) {
           if (!isNetworkError(err)) throw err;
           setOnline(false);
-          if (active && !active.pending) {
+          if (active?.pending) await forgetSnapshot(active);
+          else if (active) {
             const stored = await snapshot(active);
             adopt(active);
             setData(stored || null);
@@ -184,10 +184,8 @@ export function useDiary() {
     setOnline(false);
     setData(null);
     try {
-      // Tombstone survives a lost connection until the server accepts logout.
-      // Mark synchronously: the user can close the tab before a slow request ends.
+      // Hide the offline copy before the user can close the tab during logout.
       revoke(active);
-      await forgetSnapshot(active);
     } catch (error) {
       setNotice(message(error));
       return;

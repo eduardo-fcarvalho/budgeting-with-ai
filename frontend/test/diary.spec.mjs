@@ -38,8 +38,8 @@ test.beforeAll(async () => {
         account = null;
         return send({});
       }
-      if (!account || req.headers["x-account-id"] !== account)
-        return send({}, 409);
+      if (!account) return send({}, 401);
+      if (req.headers["x-account-id"] !== account) return send({}, 409);
       const rows = profiles.get(account);
       if (path === "/api/drafts") {
         const start = bytes.indexOf("RIFF");
@@ -198,6 +198,54 @@ test("consulta offline e logout eliminam o histórico em todas as abas", async (
   ).toBeVisible();
   await expect(page.getByText("Almoço de teste")).toHaveCount(0);
   expect((await cachedHistoryCounts(page)).expenses).toBe(0);
+});
+
+test("sair revoga a sessão mesmo quando a cópia offline não pode ser apagada", async ({ page }) => {
+  account = null;
+  const email = "falha-de-limpeza@example.test";
+  const expense = { id: "sair", date: "2026-03-15", description: "Gasto fictício de saída", amount: 850, category: "Transporte" };
+  profiles.set(email, new Map([[expense.id, expense]]));
+  await page.clock.setFixedTime(new Date(2026, 2, 15, 12));
+  await page.addInitScript(() => {
+    const remove = IDBObjectStore.prototype.delete;
+    IDBObjectStore.prototype.delete = function (key) {
+      if (this.name === "history" && !window.allowHistoryDelete)
+        throw new DOMException("Falha simulada na limpeza.", "UnknownError");
+      return remove.call(this, key);
+    };
+  });
+  await page.goto(url);
+  await login(page, email);
+  const saved = page.getByRole("heading", { name: expense.description });
+  await expect(saved).toBeVisible();
+  await expect.poll(() => cachedHistoryCounts(page)).toEqual({ snapshots: 1, expenses: 1 });
+
+  await page.getByRole("button", { name: "Ajustes" }).click();
+  await page.getByRole("button", { name: "Sair" }).click();
+  await expect(page.getByRole("status")).toHaveText("Falha simulada na limpeza.");
+  const historyStatus = () => page.evaluate(async (user) => {
+    const response = await fetch("/api/expenses", {
+      cache: "no-store",
+      headers: { "X-Account-ID": user },
+    });
+    return response.status;
+  }, email);
+  expect(await historyStatus()).toBe(401);
+  expect(await cachedHistoryCounts(page)).toEqual({ snapshots: 1, expenses: 1 });
+
+  await page.reload();
+  await expect(page.getByRole("status")).toHaveText("Falha simulada na limpeza.");
+  await expect(saved).toHaveCount(0);
+  await login(page, "nova-conta@example.test");
+  await expect(page.getByRole("status")).toHaveText("Reconecte e sincronize a saída antes de entrar.");
+  expect(await historyStatus()).toBe(401);
+
+  await page.evaluate(() => { window.allowHistoryDelete = true; });
+  await page.getByRole("button", { name: "Verificar conexão" }).click();
+  await expect.poll(() => cachedHistoryCounts(page)).toEqual({ snapshots: 0, expenses: 0 });
+  await login(page, "nova-conta@example.test");
+  await expect(page.getByText("Nenhum gasto em", { exact: false })).toBeVisible();
+  await expect(saved).toHaveCount(0);
 });
 
 test("sessão revogada enquanto offline elimina a cópia ao reconectar", async ({ page, context }) => {
