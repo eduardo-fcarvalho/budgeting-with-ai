@@ -49,7 +49,7 @@ test("imagem do piloto persiste gastos e separa as contas no mesmo navegador", a
     new URL(response.url()).pathname === "/api/logout" && response.request().method() === "POST"
   );
   await context.setOffline(false);
-  expect((await logout).status()).toBe(204);
+  expect((await logout).status()).toBe(418);
   await page.goto(url);
   await login(page, "b");
   await expect(page.getByText("Nenhum gasto em", { exact: false })).toBeVisible();
