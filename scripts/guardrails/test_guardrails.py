@@ -351,6 +351,17 @@ class Commit(unittest.TestCase):
     def test_sem_stack_migracao_nao_e_protegida(self):
         self.assertIsNone(self.motivo([("M", self.MIGRACAO)], migracoes=()))
 
+    def test_migracoes_do_piloto_no_hook_e_no_pr(self):
+        pasta = "src/main/resources/db/migration/"
+        aplicada = pasta + "V1__diario.sql"
+        nova = pasta + "V3__nova.sql"
+        for alteracao in (("M", aplicada), ("D", aplicada), ("R100", aplicada, nova), ("A", nova)):
+            with self.subTest(alteracao=alteracao):
+                bloqueia = alteracao[0] != "A"
+                self.assertEqual(bool(motivo_commit([alteracao], lambda _: "")), bloqueia)
+                achados = conferencias_pr([alteracao], lambda _: "", "teste")
+                self.assertEqual(any(nivel == "error" for nivel, _ in achados), bloqueia)
+
 
 class PullRequest(unittest.TestCase):
     CARD = "xx-03-guardrails-ci"

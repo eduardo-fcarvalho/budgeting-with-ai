@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 
 const profiles = new Map();
+const loginPassword = "somente-teste";
 let account = null;
 let server;
 let url;
@@ -103,9 +104,32 @@ test.afterAll(async () => {
 });
 
 async function login(page, email) {
-  await page.getByLabel("E-mail").fill(email);
-  await page.getByLabel("Senha").fill("somente-teste");
+  // Playwright inclui o argumento de fill nos logs quando a ação falha.
+  await page.getByLabel("E-mail").evaluate((field, value) => { field.value = value; }, email);
+  await page.getByLabel("Senha").evaluate((field, value) => { field.value = value; }, loginPassword);
   await page.getByRole("button", { name: "Acessar meu diário" }).click();
+}
+
+async function cachedHistoryCounts(page) {
+  return page.evaluate(async () => {
+    const db = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("budgeting-history");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      return await new Promise((resolve, reject) => {
+        const request = db.transaction("history").objectStore("history").getAll();
+        request.onsuccess = () => resolve({
+          snapshots: request.result.length,
+          expenses: request.result.flatMap((snapshot) => snapshot.expenses).length,
+        });
+        request.onerror = () => reject(request.error);
+      });
+    } finally {
+      db.close();
+    }
+  });
 }
 
 test("consulta offline e logout eliminam o histórico em todas as abas", async ({
@@ -173,17 +197,34 @@ test("consulta offline e logout eliminam o histórico em todas as abas", async (
     second.getByText("Nenhum gasto em", { exact: false }),
   ).toBeVisible();
   await expect(page.getByText("Almoço de teste")).toHaveCount(0);
-  const count = await page.evaluate(async () => {
-    const db = await new Promise((resolve) => {
-      const r = indexedDB.open("budgeting-history");
-      r.onsuccess = () => resolve(r.result);
-    });
-    return await new Promise((resolve) => {
-      const r = db.transaction("history").objectStore("history").getAll();
-      r.onsuccess = () => resolve(r.result.flatMap((s) => s.expenses).length);
-    });
-  });
-  expect(count).toBe(0);
+  expect((await cachedHistoryCounts(page)).expenses).toBe(0);
+});
+
+test("sessão revogada enquanto offline elimina a cópia ao reconectar", async ({ page, context }) => {
+  account = null;
+  const email = "sessao-revogada@example.test";
+  const expense = { id: "revogado", date: "2026-03-15", description: "Passagem fictícia", amount: 850, category: "Transporte" };
+  profiles.set(email, new Map([[expense.id, expense]]));
+  await page.clock.setFixedTime(new Date(2026, 2, 15, 12));
+  await page.goto(url);
+  await login(page, email);
+  const saved = page.getByRole("heading", { name: expense.description });
+  await expect(saved).toBeVisible();
+  await expect.poll(() => cachedHistoryCounts(page)).toEqual({ snapshots: 1, expenses: 1 });
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+
+  await context.setOffline(true);
+  account = null;
+  await page.reload();
+  await expect(saved).toBeVisible();
+  await expect(page.getByRole("button", { name: "Novo gasto" })).toBeDisabled();
+
+  const sessionCheck = page.waitForResponse((response) => response.url() === url + "/api/session");
+  await context.setOffline(false);
+  expect((await sessionCheck).status()).toBe(200);
+  await expect(page.getByRole("heading", { name: "Entrar" })).toBeVisible();
+  await expect(saved).toHaveCount(0);
+  expect(await cachedHistoryCounts(page)).toEqual({ snapshots: 0, expenses: 0 });
 });
 
 test("voz abre rascunho editável e descartar mantém o histórico intacto", async ({
