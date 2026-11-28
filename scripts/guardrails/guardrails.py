@@ -20,8 +20,7 @@ import shlex
 import subprocess
 import sys
 
-# Preenchidos pela stack em uso (ver stacks/<stack>/README.md). Vazios, as regras deles não valem.
-MIGRACOES = ()  # S1: pastas de migrações já aplicadas, que não se editam
+MIGRACOES = ("src/main/resources/db/migration/",)
 
 SEPARADORES = {";", "&", "&&", "|", "||", "\n", "(", ")"}
 PREFIXOS = {"sudo", "env", "command", "time", "nohup", "exec"}
@@ -269,7 +268,7 @@ def motivo_commit(arquivos, conteudo, migracoes=MIGRACOES):
     """arquivos: tuplas (status, caminho[, novo]) do `git diff --cached --name-status`."""
     for status, *caminhos in arquivos:
         caminho = caminhos[-1]
-        if status[0] in "MDR" and migracoes and caminhos[0].startswith(migracoes):
+        if status[0] in "MDRT" and caminhos[0].startswith(migracoes):
             return "S1: migração aplicada não se edita; crie uma migração nova"
         if status[0] == "D":
             continue

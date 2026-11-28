@@ -20,14 +20,23 @@ class AccountCommand implements ApplicationRunner {
     @Override @Transactional public void run(ApplicationArguments args) {
         var console = System.console();
         if (console == null) throw new IllegalStateException("Use um terminal interativo.");
-        String email = console.readLine("E-mail: ").trim().toLowerCase(Locale.ROOT);
+        String email = normalizeEmail(console.readLine("E-mail: "));
+        String mode = args.getOptionValues("budget.account").getFirst();
+        char[] password = console.readPassword("Senha (mínimo de 12 caracteres): ");
+        updateAccount(mode, email, password);
+    }
+
+    private static String normalizeEmail(String input) {
+        String email = input.trim().toLowerCase(Locale.ROOT);
         if (email.length() > 254 || !email.matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+"))
             throw new IllegalArgumentException("E-mail inválido");
-        char[] password = console.readPassword("Senha (mínimo de 12 caracteres): ");
+        return email;
+    }
+
+    void updateAccount(String mode, String email, char[] password) {
         try {
             if (password.length < 12 || new String(password).getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72)
                 throw new IllegalArgumentException("Use 12 caracteres ou mais e até 72 bytes.");
-            var mode = args.getOptionValues("budget.account").getFirst();
             String hash = passwords.encode(new String(password));
             if ("create".equals(mode)) {
                 int inserted = db.sql("insert into account(id,email,password_hash) values(?,?,?) on conflict (email) do nothing")
