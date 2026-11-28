@@ -26,6 +26,9 @@ permanece acessível até o logout local ou a próxima verificação da sessão.
 
 ## Verificar
 
+O CI do piloto verifica em cada PR os guardrails, a API, a PWA e a imagem Docker.
+O [registro do piloto](docs/versoes/piloto.md#cobertura-e-ci) detalha os cenários e o ensaio de recuperação.
+
 - Com Java 25 e PostgreSQL **descartável**, defina `DATABASE_URL` (URL JDBC),
   `POSTGRES_USER` e `POSTGRES_PASSWORD` e execute `./mvnw -B clean verify`.
   Os testes criam contas fictícias. O servidor HTTP simulado verifica os modelos
@@ -34,6 +37,11 @@ permanece acessível até o logout local ou a próxima verificação da sessão.
 - Em `frontend/`, use Node 24 e rode `npm ci`, `npm test`, `npm run build`,
   `npx playwright install --with-deps chromium` e `npm run test:browser`.
 - Execute `python3 -m unittest discover -s scripts/guardrails` para os hooks.
+- Com Docker Compose 2.24.4 ou mais recente, rode `bash scripts/test-pilot.sh recovery` na raiz
+  para ensaiar a recuperação. Com o Chromium do Playwright já instalado, rode
+  `bash scripts/test-pilot.sh image` para checar a imagem. Ambos criam um projeto e um volume
+  descartáveis, com a aplicação em uma porta local aleatória. O ensaio também roda sob
+  demanda em **Actions → CI → Run workflow**, com a opção de recuperação.
 
 ## Voz e experimento pago
 

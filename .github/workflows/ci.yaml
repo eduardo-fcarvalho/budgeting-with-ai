@@ -1,10 +1,16 @@
-# Verifica os guardrails, a API e a PWA do piloto.
+# Verifica os guardrails, a API, a PWA e a imagem do piloto.
 name: CI
 
 on:
   pull_request:
   push:
-    branches: [main, 'bg-*']
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      recovery:
+        description: Ensaiar backup e restauração
+        type: boolean
+        default: false
 
 # Um push novo no mesmo PR cancela a execução anterior, que já ficou velha.
 concurrency:
@@ -21,8 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # fetch-depth 0: as conferências do PR comparam com a origin/main, que um clone raso não tem.
-      - uses: actions/checkout@v6
+      # O histórico contém a base exata usada pelo evento do PR.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -35,13 +41,14 @@ jobs:
       # Os nomes passam por env, não por ${{ }} no script: um nome de branch não vira comando.
       - name: Conferências do PR
         if: github.event_name == 'pull_request'
-        run: python3 scripts/guardrails/guardrails.py pr "origin/$BASE" "$BRANCH"
+        run: python3 scripts/guardrails/guardrails.py pr "$BASE" "$BRANCH"
         env:
-          BASE: ${{ github.base_ref }}
+          BASE: ${{ github.event.pull_request.base.sha }}
           BRANCH: ${{ github.head_ref }}
 
   api:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     services:
       postgres:
         image: postgres:18-alpine
@@ -52,23 +59,36 @@ jobs:
         ports: ['5432:5432']
         options: --health-cmd="pg_isready -U budgeting" --health-interval=5s --health-retries=12
     env:
+      DATABASE_URL: jdbc:postgresql://127.0.0.1:5432/budgeting
+      POSTGRES_USER: budgeting
       POSTGRES_PASSWORD: ci-only
+      OPENAI_API_KEY: ''
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - run: ./mvnw -B verify
+      - name: Testar e empacotar a API
+        run: ./mvnw -B verify
+      - name: Resumir a suíte Java
+        if: always()
+        run: awk '/^Tests run: / { print }' target/surefire-reports/*.txt >> "$GITHUB_STEP_SUMMARY"
+        continue-on-error: true
   pwa:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
           cache: npm
@@ -78,3 +98,32 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
+  imagem:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Preparar o navegador
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Verificar a imagem do piloto
+        run: bash scripts/test-pilot.sh image
+  recuperacao:
+    if: github.event_name == 'workflow_dispatch' && inputs.recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Ensaiar backup e restauração
+        run: bash scripts/test-pilot.sh recovery
