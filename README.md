@@ -23,6 +23,8 @@ Para criar cada conta, execute no terminal
 O comando solicita e-mail e senha com entrada de senha oculta. Use `--budget.account=reset`
 para redefinir a senha e revogar as sessões no servidor. Em um celular desconectado, a cópia já sincronizada
 permanece acessível até o logout local ou a próxima verificação da sessão.
+Ao tocar em **Sair**, o histórico some de todas as abas. Com conexão, a sessão é
+encerrada no servidor mesmo se a limpeza da cópia local precisar ser repetida.
 
 ## Verificar
 

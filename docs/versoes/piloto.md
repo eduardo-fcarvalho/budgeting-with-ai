@@ -51,7 +51,7 @@ na avaliação local. O uso da PWA nos dois celulares ainda precisa ser validado
 | --- | --- |
 | Guardrails | Regras dos hooks e proteção das migrações Flyway existentes na base do PR. |
 | API | Sessões e isolamento, limites de gastos em centavos, repetição e rollback, contrato de voz com provedor simulado e reserva concorrente no PostgreSQL. |
-| PWA | Valores e períodos, edição e rascunhos, cache offline, logout e revogação de sessão na reconexão. |
+| PWA | Valores e períodos, edição e rascunhos, cache offline, logout e revogação de sessão na reconexão ou com falha na limpeza local. |
 | Imagem | Login, gasto e categoria pessoal persistidos, consulta offline e troca de conta no mesmo navegador com a aplicação empacotada. |
 | Recuperação sob demanda | Backup de dados fictícios, restauração em banco vazio, exclusão das sessões e teto de voz esgotado no mês UTC. |
 
