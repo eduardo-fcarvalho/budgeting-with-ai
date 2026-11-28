@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.*;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -16,6 +17,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.databind.ObjectMapper;
@@ -24,7 +26,10 @@ import static org.assertj.core.api.Assertions.*;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "OPENAI_API_KEY=local-contract-test", "VOICE_PATH=transcription", "server.servlet.session.cookie.secure=false"
 })
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@DirtiesContext
 class VoiceContractTest {
+    private static final String SCHEMA = "voice_test_" + UUID.randomUUID().toString().replace("-", "");
     private static HttpServer server;
     private static final List<String> requests = new CopyOnWriteArrayList<>();
     private static final AtomicBoolean failExtraction = new AtomicBoolean();
@@ -36,6 +41,9 @@ class VoiceContractTest {
     @Autowired VoiceBudget budget;
 
     @DynamicPropertySource static void provider(DynamicPropertyRegistry registry) throws IOException {
+        registry.add("spring.datasource.hikari.schema", () -> SCHEMA);
+        registry.add("spring.flyway.schemas", () -> SCHEMA);
+        registry.add("spring.flyway.default-schema", () -> SCHEMA);
         server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
         server.createContext("/v1/", exchange -> {
             String body=new String(exchange.getRequestBody().readAllBytes(),StandardCharsets.ISO_8859_1);
@@ -56,7 +64,14 @@ class VoiceContractTest {
         server.start();
         registry.add("budget.voice.base-url",()->"http://127.0.0.1:"+server.getAddress().getPort()+"/v1");
     }
-    @AfterAll static void stop() { if(server!=null) server.stop(0); }
+
+    @AfterAll void cleanUp() {
+        try {
+            db.sql("drop schema if exists " + SCHEMA + " cascade").update();
+        } finally {
+            if (server != null) server.stop(0);
+        }
+    }
 
     @BeforeEach void resetProvider() {
         requests.clear();
@@ -64,7 +79,7 @@ class VoiceContractTest {
     }
 
     @AfterEach void clearBudget() {
-        db.sql("delete from voice_budget").update();
+        db.sql("delete from " + SCHEMA + ".voice_budget").update();
     }
 
     private static byte[] wav() {
@@ -105,7 +120,7 @@ class VoiceContractTest {
         return browser;
     }
 
-    private static java.net.http.HttpResponse<String> draft(DiaryTest.Browser browser, byte[] audio) throws Exception {
+    private static HttpResponse<String> draft(DiaryTest.Browser browser, byte[] audio) throws Exception {
         String boundary = "fixture-boundary";
         var body = HttpRequest.BodyPublishers.concat(
                 HttpRequest.BodyPublishers.ofString("--" + boundary + "\r\n"

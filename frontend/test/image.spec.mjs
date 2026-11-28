@@ -1,12 +1,13 @@
 import { test, expect } from "@playwright/test";
 
 const url = process.env.BUDGETING_IMAGE_URL;
+const loginPassword = "somente-teste-123";
 test.skip(!url, "Requer a URL da imagem do piloto com o banco de teste.");
 
 async function login(page, account) {
   // Playwright inclui o argumento de fill nos logs quando a ação falha.
   await page.getByLabel("E-mail").evaluate((field, value) => { field.value = value; }, `${account}@example.test`);
-  await page.getByLabel("Senha").evaluate((field) => { field.value = "somente-teste-123"; });
+  await page.getByLabel("Senha").evaluate((field, value) => { field.value = value; }, loginPassword);
   await page.getByRole("button", { name: "Acessar meu diário" }).click();
 }
 

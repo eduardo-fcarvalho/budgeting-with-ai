@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 
 const profiles = new Map();
+const loginPassword = "somente-teste";
 let account = null;
 let server;
 let url;
@@ -105,7 +106,7 @@ test.afterAll(async () => {
 async function login(page, email) {
   // Playwright inclui o argumento de fill nos logs quando a ação falha.
   await page.getByLabel("E-mail").evaluate((field, value) => { field.value = value; }, email);
-  await page.getByLabel("Senha").evaluate((field) => { field.value = "somente-teste"; });
+  await page.getByLabel("Senha").evaluate((field, value) => { field.value = value; }, loginPassword);
   await page.getByRole("button", { name: "Acessar meu diário" }).click();
 }
 
