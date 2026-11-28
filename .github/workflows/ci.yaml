@@ -76,8 +76,10 @@ jobs:
         run: ./mvnw -B verify
       - name: Resumir a suíte Java
         if: always()
-        run: awk '/^Tests run: / { print }' target/surefire-reports/*.txt >> "$GITHUB_STEP_SUMMARY"
-        continue-on-error: true
+        run: |
+          if compgen -G 'target/surefire-reports/*.txt' >/dev/null; then
+            awk '/^Tests run: / { print }' target/surefire-reports/*.txt >> "$GITHUB_STEP_SUMMARY"
+          fi
   pwa:
     runs-on: ubuntu-latest
     timeout-minutes: 10
